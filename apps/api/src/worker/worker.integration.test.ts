@@ -13,7 +13,7 @@ import {
   createEphemeralDatabase,
   type EphemeralDatabase,
 } from '../test/support.js';
-import { runWorkerOnce } from './worker.js';
+import { runWorkerOnce, startWorker } from './worker.js';
 
 loadEnvFileIfPresent();
 
@@ -28,6 +28,16 @@ const silentLog = {
   warn: () => {},
   error: () => {},
 } as unknown as FastifyBaseLogger;
+
+/** Espera activa: sondea una condición hasta que se cumple o se agota el plazo. */
+async function waitFor(condition: () => boolean, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (condition()) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error('no se cumplió la condición a tiempo');
+}
 
 const dbAvailable = databaseUrl !== '' && (await canReachDatabase(databaseUrl));
 
@@ -49,12 +59,15 @@ describe.runIf(dbAvailable)('worker — integración con PostgreSQL', () => {
   let closedPort = 0;
   let monitorId: string;
   let httpsMonitorId: string;
+  /** Avisos recibidos en /deadman (prueba del dead-man switch). */
+  let deadManPings = 0;
 
   beforeAll(async () => {
     ephemeral = await createEphemeralDatabase(databaseUrl, 'centinela_test_worker');
 
-    // Servicio vigilado (HTTP).
-    httpServer = createHttpServer((_request, response) => {
+    // Servicio vigilado (HTTP); /deadman hace de servicio dead-man.
+    httpServer = createHttpServer((request, response) => {
+      if (request.url === '/deadman') deadManPings += 1;
       response.writeHead(200, { 'content-type': 'text/plain' });
       response.end('centinela ok');
     });
@@ -146,6 +159,8 @@ describe.runIf(dbAvailable)('worker — integración con PostgreSQL', () => {
       concurrency: 3,
       allowPrivateTargets: true,
       sslRecheckHours: 24,
+      stallSeconds: 300,
+      selfPingSeconds: 300,
     },
   });
 
@@ -279,5 +294,45 @@ describe.runIf(dbAvailable)('worker — integración con PostgreSQL', () => {
       .where(eq(incidentEvents.incidentId, incident!.id))
       .orderBy(asc(incidentEvents.id));
     expect(events.map((event) => event.kind)).toEqual(['opened', 'recovered']);
+  });
+
+  it('expone su salud y avisa al servicio dead-man cuando toca', async () => {
+    const worker = startWorker({
+      ...deps(),
+      config: {
+        ...deps().config,
+        tickMs: 100,
+        selfPingUrl: `http://127.0.0.1:${httpPort}/deadman`,
+        selfPingSeconds: 0,
+      },
+    });
+
+    try {
+      await waitFor(() => worker.health().cycles >= 1);
+
+      const health = worker.health();
+      expect(health.stalled).toBe(false);
+      expect(health.lastCycleAt).not.toBeNull();
+      expect(health.lagSeconds).toBeGreaterThanOrEqual(0);
+
+      await waitFor(() => deadManPings >= 1);
+      expect(worker.health().lastSelfPingAt).not.toBeNull();
+    } finally {
+      await worker.stop();
+    }
+  });
+
+  it('marca `stalled` cuando el umbral es más fino que el hueco entre ciclos', async () => {
+    const worker = startWorker({
+      ...deps(),
+      config: { ...deps().config, tickMs: 50, stallSeconds: 0.001 },
+    });
+
+    try {
+      await waitFor(() => worker.health().stalled);
+      expect(worker.health().stalled).toBe(true);
+    } finally {
+      await worker.stop();
+    }
   });
 });

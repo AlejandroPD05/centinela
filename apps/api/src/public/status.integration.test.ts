@@ -315,13 +315,9 @@ describe.runIf(dbAvailable)('estado público — integración con PostgreSQL', (
 
     // Apagado ordenado: el proceso se despide y la conexión cierra sola.
     shutdownHub();
-    let terminado = false;
-    while (!buffer.includes('event: bye') && !terminado) {
+    while (!buffer.includes('event: bye')) {
       const { value, done } = await reader.read();
-      if (done) {
-        terminado = true;
-        break;
-      }
+      if (done) break;
       buffer += decoder.decode(value, { stream: true });
     }
 

@@ -31,6 +31,13 @@ const envSchema = z.object({
   WORKER_TICK_MS: z.coerce.number().int().min(50).max(60_000).default(1000),
   WORKER_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(10),
   WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(50).default(5),
+  /** Umbral de atasco del bucle del worker (segundos). */
+  WORKER_STALL_SECONDS: z.coerce.number().int().min(30).max(86_400).default(300),
+
+  // Dead-man switch (opcional): el worker visita esta URL cada
+  // SELF_PING_SECONDS; si Centinela calla, el servicio externo avisa.
+  SELF_PING_URL: z.string().url().optional(),
+  SELF_PING_SECONDS: z.coerce.number().int().min(30).max(86_400).default(300),
 
   // Guarda SSRF: desactivable solo para desarrollo local y tests.
   ALLOW_PRIVATE_TARGETS: booleanish(false),

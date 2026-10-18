@@ -18,15 +18,18 @@ import { monitorRoutes } from './routes/monitors.js';
 import { openApiRoutes } from './routes/openapi.js';
 import { statusRoutes } from './routes/status.js';
 import { workspaceRoutes } from './routes/workspaces.js';
+import type { WorkerHealth } from './worker/worker.js';
 
 export interface BuildServerOptions {
   env: Env;
   /** Sin base de datos no se registra /api/health/ready (arranque mínimo). */
   database?: Database;
+  /** Señal de vida del motor de checks, para /api/health (opcional). */
+  workerHealth?: () => WorkerHealth | null;
 }
 
 /** Construye Fastify sin abrir el puerto: los tests usan `app.inject()`. */
-export function buildServer({ env, database }: BuildServerOptions): FastifyInstance {
+export function buildServer({ env, database, workerHealth }: BuildServerOptions): FastifyInstance {
   const app = Fastify({
     logger: loggerOptions(env),
     trustProxy: true,
@@ -78,7 +81,7 @@ export function buildServer({ env, database }: BuildServerOptions): FastifyInsta
       }));
 
       // Públicas: salud, latidos y documentación.
-      healthRoutes(api, database);
+      healthRoutes(api, database, workerHealth);
       openApiRoutes(api);
 
       if (database) {

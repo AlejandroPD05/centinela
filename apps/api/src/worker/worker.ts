@@ -16,6 +16,12 @@ export interface WorkerConfig {
   allowPrivateTargets: boolean;
   /** Cada cuántas horas se revisa el certificado TLS de los monitores https. */
   sslRecheckHours: number;
+  /** Umbral de atasco del bucle (segundos): a partir de ahí, `stalled`. */
+  stallSeconds: number;
+  /** Dead-man switch: URL avisada cada `selfPingSeconds` (opcional). */
+  selfPingUrl?: string | undefined;
+  /** Cada cuántos segundos se avisa al servicio dead-man. */
+  selfPingSeconds: number;
   /** Claves opcionales para el canal email (Resend). */
   resendApiKey?: string | undefined;
   emailFrom?: string | undefined;
@@ -27,11 +33,27 @@ export interface WorkerDeps {
   config: WorkerConfig;
 }
 
+/** Señal de vida del motor, para /api/health y el vigilante del proceso. */
+export interface WorkerHealth {
+  /** Ciclos completados desde el arranque. */
+  cycles: number;
+  /** Fin del último ciclo (ISO); `null` si aún no cerró ninguno. */
+  lastCycleAt: string | null;
+  /** Segundos desde el fin del último ciclo (o desde el arranque). */
+  lagSeconds: number;
+  /** `true` si el bucle lleva más de `stallSeconds` sin cerrar un ciclo. */
+  stalled: boolean;
+  /** Último aviso al servicio dead-man (ISO); `null` si no hay o no toca. */
+  lastSelfPingAt: string | null;
+}
+
 export interface WorkerHandle {
   /** Procesa un único ciclo: reclama y ejecuta los checks vencidos. */
   runOnce(): Promise<number>;
   /** Detiene el bucle y espera a que terminen los checks en curso. */
   stop(): Promise<void>;
+  /** Señal de vida del bucle (para la salud y el vigilante). */
+  health(): WorkerHealth;
 }
 
 const SSL_BATCH_SIZE = 5;
@@ -141,11 +163,50 @@ async function runDeliveryBatch(deps: WorkerDeps): Promise<number> {
  */
 export function startWorker(deps: WorkerDeps): WorkerHandle {
   let running = true;
+  let cycles = 0;
+  let lastCycleAt: number | null = null;
+  let lastSelfPingAt: number | null = null;
+  const startedAt = Date.now();
+
+  /**
+   * Dead-man switch: avisa a un servicio externo (healthchecks.io y similares)
+   * de que el motor sigue vivo. Si el bucle se atasca o el proceso muere, los
+   * avisos cesan y el servicio externo quien da la alarma. La URL viene del
+   * entorno (operador), no de usuarios: se visita tal cual.
+   */
+  const pingDeadMan = async (): Promise<void> => {
+    const url = deps.config.selfPingUrl;
+    if (!url) return;
+    if (
+      lastSelfPingAt !== null &&
+      Date.now() - lastSelfPingAt < deps.config.selfPingSeconds * 1000
+    ) {
+      return;
+    }
+
+    lastSelfPingAt = Date.now();
+
+    try {
+      const response = await fetch(url, {
+        headers: { 'user-agent': 'Centinela/0.1' },
+        signal: AbortSignal.timeout(NOTIFICATION_TIMEOUT_MS),
+      });
+      await response.body?.cancel().catch(() => undefined);
+      if (!response.ok) {
+        deps.log.warn({ status: response.status }, 'el servicio dead-man no aceptó el aviso');
+      }
+    } catch (error) {
+      deps.log.warn({ err: error }, 'no se pudo avisar al servicio dead-man');
+    }
+  };
 
   const loop = (async () => {
     while (running) {
       try {
         const processed = await runWorkerOnce(deps);
+        cycles += 1;
+        lastCycleAt = Date.now();
+        await pingDeadMan();
         if (processed === 0) await sleep(deps.config.tickMs);
       } catch (error) {
         // La base de datos puede estar de mantenimiento: esperar y reintentar.
@@ -160,6 +221,18 @@ export function startWorker(deps: WorkerDeps): WorkerHandle {
     async stop() {
       running = false;
       await loop;
+    },
+    health() {
+      const since = lastCycleAt ?? startedAt;
+      const lagMs = Date.now() - since;
+
+      return {
+        cycles,
+        lastCycleAt: lastCycleAt === null ? null : new Date(lastCycleAt).toISOString(),
+        lagSeconds: Math.round(lagMs / 1000),
+        stalled: lagMs > deps.config.stallSeconds * 1000,
+        lastSelfPingAt: lastSelfPingAt === null ? null : new Date(lastSelfPingAt).toISOString(),
+      };
     },
   };
 }

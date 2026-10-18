@@ -20,7 +20,32 @@ describe('salud de la API', () => {
     const response = await app.inject({ method: 'GET', url: '/api/health' });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ status: 'ok' });
+    expect(response.json()).toMatchObject({ status: 'ok', worker: null });
+  });
+
+  it('con el motor atascado se declara degraded y lo detalla', async () => {
+    const appConMotor = buildServer({
+      env,
+      workerHealth: () => ({
+        cycles: 7,
+        lastCycleAt: '2026-10-18T10:00:00.000Z',
+        lagSeconds: 400,
+        stalled: true,
+        lastSelfPingAt: null,
+      }),
+    });
+
+    try {
+      const response = await appConMotor.inject({ method: 'GET', url: '/api/health' });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        status: 'degraded',
+        worker: { stalled: true, cycles: 7, lagSeconds: 400 },
+      });
+    } finally {
+      await appConMotor.close();
+    }
   });
 
   it('las respuestas llevan las cabeceras de seguridad de helmet', async () => {
