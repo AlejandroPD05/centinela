@@ -1,0 +1,85 @@
+@import 'tailwindcss';
+
+/* =============================================================
+   Centinela — tokens v1
+   Dirección: telemetría táctica (ver docs/DESIGN.md).
+   Reglas duras: color = estado; sin radius, sombras ni glass.
+   ============================================================= */
+
+@theme {
+  --color-ground: #0b0c0e;
+  --color-panel: #121417;
+  --color-ink: #e6e6e2;
+  --color-ink-dim: #9a9c99;
+  --color-line: #26282c;
+  --color-hazard: #e61919;
+  --color-lamp-up: #46c46a;
+  --color-lamp-warn: #e0a32e;
+  --color-lamp-down: #e61919;
+
+  --font-display: 'Archivo Black', 'Archivo', system-ui, sans-serif;
+  --font-body: 'Archivo', system-ui, sans-serif;
+  --font-data: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-ground);
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background-color: var(--color-ground);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background-color: var(--color-hazard);
+    color: var(--color-ground);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-hazard);
+    outline-offset: 2px;
+  }
+}
+
+/* La lámpara de estado: la única croma de la interfaz además del rojo de señal. */
+.lamp {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 0;
+}
+
+.lamp--live {
+  animation: lamp-pulse 2.4s steps(2, end) infinite;
+}
+
+@keyframes lamp-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lamp--live {
+    animation: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

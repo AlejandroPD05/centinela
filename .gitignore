@@ -1,0 +1,24 @@
+# Dependencias
+node_modules/
+
+# Compilación
+dist/
+*.tsbuildinfo
+
+# Cobertura
+coverage/
+
+# Entorno
+.env
+.env.*
+!.env.example
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Herramientas de diseño (capturas e informes de las skills)
+.taste-skill/
+
+# Logs
+*.log

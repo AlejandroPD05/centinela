@@ -1,0 +1,22 @@
+name: centinela
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: centinela
+      POSTGRES_PASSWORD: centinela
+      POSTGRES_DB: centinela
+    ports:
+      - '${CENTINELA_DB_PORT:-5433}:5432'
+    volumes:
+      - centinela-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U centinela -d centinela']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  centinela-db:

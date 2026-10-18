@@ -1,0 +1,32 @@
+{
+  "name": "centinela",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Plataforma de monitorización de estado: uptime, latencia, SSL y heartbeats para tus proyectos.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@12.14.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @centinela/shared --filter @centinela/api --filter @centinela/web run dev",
+    "build": "pnpm -r run build",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "pnpm --filter @centinela/api run db:generate",
+    "db:migrate": "pnpm --filter @centinela/api run db:migrate",
+    "db:studio": "pnpm --filter @centinela/api run db:studio"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.10",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.2"
+  }
+}

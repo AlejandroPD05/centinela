@@ -1,0 +1,7 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Scripts de instalación aprobados: esbuild coloca su binario nativo.
+allowBuilds:
+  esbuild: true
