@@ -2,8 +2,18 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildServer } from '../app.js';
+import { signAccessToken } from '../auth/jwt.js';
+import { hashPassword } from '../auth/password.js';
 import { loadEnv, loadEnvFileIfPresent } from '../config/env.js';
-import { checkResults, incidentEvents, incidents, monitors, workspaces } from '../db/schema.js';
+import {
+  checkResults,
+  incidentEvents,
+  incidents,
+  memberships,
+  monitors,
+  users,
+  workspaces,
+} from '../db/schema.js';
 import {
   canReachDatabase,
   createEphemeralDatabase,
@@ -20,6 +30,7 @@ if (!dbAvailable) {
   console.warn('PostgreSQL no disponible: la prueba de integración del histórico se salta.');
 }
 
+const JWT_SECRET = 'secreto-de-integracion-del-historico-1234567890';
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
@@ -33,6 +44,7 @@ describe.runIf(dbAvailable)('histórico — integración con PostgreSQL', () => 
   let ephemeral: EphemeralDatabase;
   let app: FastifyInstance;
   let monitorId: string;
+  let headers: { authorization: string };
   const now = Date.now();
 
   beforeAll(async () => {
@@ -44,6 +56,29 @@ describe.runIf(dbAvailable)('histórico — integración con PostgreSQL', () => 
       .values({ name: 'Histórico', slug: `historico-${randomUUID()}` })
       .returning();
     if (!workspace) throw new Error('no se pudo crear el espacio de trabajo');
+
+    // Usuario con acceso al espacio: las rutas de lectura piden token desde M4.
+    const [user] = await db
+      .insert(users)
+      .values({
+        email: 'historico@example.com',
+        name: 'Personal de histórico',
+        passwordHash: await hashPassword('prueba-de-integracion-2026'),
+      })
+      .returning();
+    if (!user) throw new Error('no se pudo crear el usuario');
+
+    await db
+      .insert(memberships)
+      .values({ userId: user.id, workspaceId: workspace.id, role: 'admin' });
+
+    headers = {
+      authorization: `Bearer ${signAccessToken(
+        { sub: user.id, email: user.email, name: user.name },
+        JWT_SECRET,
+        3_600,
+      )}`,
+    };
 
     const [monitor] = await db
       .insert(monitors)
@@ -113,7 +148,12 @@ describe.runIf(dbAvailable)('histórico — integración con PostgreSQL', () => 
       { incidentId: incident.id, kind: 'recovered', happenedAt: new Date(now - HOUR / 2) },
     ]);
 
-    const env = loadEnv({ NODE_ENV: 'test', DATABASE_URL: databaseUrl, LOG_LEVEL: 'silent' });
+    const env = loadEnv({
+      NODE_ENV: 'test',
+      DATABASE_URL: databaseUrl,
+      LOG_LEVEL: 'silent',
+      JWT_SECRET,
+    });
     app = buildServer({ env, database: db });
     await app.ready();
   });
@@ -127,6 +167,7 @@ describe.runIf(dbAvailable)('histórico — integración con PostgreSQL', () => 
     const response = await app.inject({
       method: 'GET',
       url: `/api/monitors/${monitorId}/uptime?window=24h`,
+      headers,
     });
 
     expect(response.statusCode).toBe(200);
@@ -143,10 +184,12 @@ describe.runIf(dbAvailable)('histórico — integración con PostgreSQL', () => 
     const week = await app.inject({
       method: 'GET',
       url: `/api/monitors/${monitorId}/uptime?window=7d`,
+      headers,
     });
     const month = await app.inject({
       method: 'GET',
       url: `/api/monitors/${monitorId}/uptime?window=30d`,
+      headers,
     });
 
     expect(week.json<UptimeSummary>().checks.total).toBe(4);
@@ -158,6 +201,7 @@ describe.runIf(dbAvailable)('histórico — integración con PostgreSQL', () => 
     const response = await app.inject({
       method: 'GET',
       url: `/api/monitors/${monitorId}/history?days=30`,
+      headers,
     });
 
     expect(response.statusCode).toBe(200);
@@ -192,6 +236,7 @@ describe.runIf(dbAvailable)('histórico — integración con PostgreSQL', () => 
     const response = await app.inject({
       method: 'GET',
       url: `/api/monitors/${monitorId}/incidents`,
+      headers,
     });
 
     expect(response.statusCode).toBe(200);
@@ -207,7 +252,7 @@ describe.runIf(dbAvailable)('histórico — integración con PostgreSQL', () => 
   });
 
   it('el listado de monitores no filtra el token de heartbeat', async () => {
-    const response = await app.inject({ method: 'GET', url: '/api/monitors' });
+    const response = await app.inject({ method: 'GET', url: '/api/monitors', headers });
 
     expect(response.statusCode).toBe(200);
 
@@ -222,22 +267,25 @@ describe.runIf(dbAvailable)('histórico — integración con PostgreSQL', () => 
     const missing = await app.inject({
       method: 'GET',
       url: `/api/monitors/${randomUUID()}/uptime`,
+      headers,
     });
     expect(missing.statusCode).toBe(404);
 
     const badWindow = await app.inject({
       method: 'GET',
       url: `/api/monitors/${monitorId}/uptime?window=99y`,
+      headers,
     });
     expect(badWindow.statusCode).toBe(400);
 
     const badDays = await app.inject({
       method: 'GET',
       url: `/api/monitors/${monitorId}/history?days=0`,
+      headers,
     });
     expect(badDays.statusCode).toBe(400);
 
-    const badId = await app.inject({ method: 'GET', url: '/api/monitors/no-es-uuid' });
+    const badId = await app.inject({ method: 'GET', url: '/api/monitors/no-es-uuid', headers });
     expect(badId.statusCode).toBe(400);
   });
 });

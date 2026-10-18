@@ -6,6 +6,7 @@ const env = loadEnv({
   NODE_ENV: 'test',
   LOG_LEVEL: 'silent',
   DATABASE_URL: 'postgres://centinela:centinela@localhost:5433/centinela',
+  JWT_SECRET: 'secreto-de-pruebas-unitarias-con-32-caracteres',
 });
 
 const app = buildServer({ env });

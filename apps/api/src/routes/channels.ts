@@ -1,9 +1,12 @@
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { recordAudit } from '../audit/record.js';
+import { authUser, requireRole, workspaceRoles, type Authenticator } from '../auth/plugin.js';
 import { assertHostAllowed } from '../checks/ssrf.js';
 import type { Env } from '../config/env.js';
 import type { Database } from '../db/client.js';
+import { pgErrorInfo } from '../db/errors.js';
 import { notificationChannels, workspaces } from '../db/schema.js';
 
 const idSchema = z.uuid();
@@ -46,17 +49,6 @@ const patchSchema = z.object({
   config: z.record(z.string(), z.unknown()).optional(),
 });
 
-/** Extrae el código de error de PostgreSQL aunque Drizzle lo envuelva. */
-function pgErrorCode(error: unknown): string | undefined {
-  if (typeof error !== 'object' || error === null) return undefined;
-
-  if ('code' in error && typeof (error as { code?: unknown }).code === 'string') {
-    return (error as { code: string }).code;
-  }
-
-  return pgErrorCode((error as { cause?: unknown }).cause);
-}
-
 /**
  * Los canales apuntan a URLs externas: se validan con la misma guarda SSRF
  * que los monitores (salvo que el entorno permita destinos privados). El
@@ -73,21 +65,38 @@ async function channelTargetError(target: string, env: Env): Promise<string | nu
   }
 }
 
-/** CRUD de canales de aviso. En M4 pasará detrás de autenticación por rol. */
-export function channelRoutes(app: FastifyInstance, database: Database, env: Env): void {
-  app.get('/channels', async () => {
+/** CRUD de canales de aviso: lectura desde viewer, cambios desde editor. */
+export function channelRoutes(
+  app: FastifyInstance,
+  database: Database,
+  env: Env,
+  authenticate: Authenticator,
+): void {
+  app.get('/channels', { preHandler: authenticate }, async (request) => {
+    const user = authUser(request);
+
+    const roles = await workspaceRoles(database, user.id);
+    const workspaceIds = [...roles.keys()];
+    if (workspaceIds.length === 0) return { channels: [] };
+
     const channels = await database
       .select()
       .from(notificationChannels)
+      .where(inArray(notificationChannels.workspaceId, workspaceIds))
       .orderBy(asc(notificationChannels.name));
+
     return { channels };
   });
 
-  app.post('/channels', async (request, reply) => {
+  app.post('/channels', { preHandler: authenticate }, async (request, reply) => {
+    const user = authUser(request);
+
     const parsed = createSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: 'canal inválido', issues: parsed.error.issues });
     }
+
+    if (!(await requireRole(database, request, reply, parsed.data.workspaceId, 'editor'))) return;
 
     const target =
       parsed.data.type === 'discord'
@@ -112,81 +121,130 @@ export function channelRoutes(app: FastifyInstance, database: Database, env: Env
 
     try {
       const [channel] = await database.insert(notificationChannels).values(parsed.data).returning();
+      if (!channel) throw new Error('sin fila al crear el canal');
+
+      await recordAudit(database, {
+        userId: user.id,
+        workspaceId: channel.workspaceId,
+        action: 'channel.create',
+        targetType: 'channel',
+        targetId: channel.id,
+        detail: { name: channel.name, type: channel.type },
+        ip: request.ip,
+      });
+
       return reply.code(201).send({ channel });
     } catch (error) {
-      if (pgErrorCode(error) === '23505') {
+      if (pgErrorInfo(error).code === '23505') {
         return reply.code(409).send({ error: 'ya existe un canal con ese nombre en el espacio' });
       }
       throw error;
     }
   });
 
-  app.patch<{ Params: { id: string } }>('/channels/:id', async (request, reply) => {
-    const id = idSchema.safeParse(request.params.id);
-    if (!id.success) return reply.code(400).send({ error: 'id de canal inválido' });
+  app.patch<{ Params: { id: string } }>(
+    '/channels/:id',
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const user = authUser(request);
 
-    const parsed = patchSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply.code(400).send({ error: 'cambios inválidos', issues: parsed.error.issues });
-    }
+      const id = idSchema.safeParse(request.params.id);
+      if (!id.success) return reply.code(400).send({ error: 'id de canal inválido' });
 
-    const [channel] = await database
-      .select()
-      .from(notificationChannels)
-      .where(eq(notificationChannels.id, id.data));
-
-    if (!channel) return reply.code(404).send({ error: 'canal no encontrado' });
-
-    let config = channel.config;
-    if (parsed.data.config) {
-      const configSchema = configSchemas[channel.type];
-      const validated = configSchema.safeParse(parsed.data.config);
-      if (!validated.success) {
-        return reply.code(400).send({
-          error: `config inválida para un canal ${channel.type}`,
-          issues: validated.error.issues,
-        });
+      const parsed = patchSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send({ error: 'cambios inválidos', issues: parsed.error.issues });
       }
 
-      const target =
-        channel.type === 'discord'
-          ? (validated.data as { webhookUrl: string }).webhookUrl
-          : channel.type === 'webhook'
-            ? (validated.data as { url: string }).url
-            : null;
+      const [channel] = await database
+        .select()
+        .from(notificationChannels)
+        .where(eq(notificationChannels.id, id.data));
 
-      if (target) {
-        const targetError = await channelTargetError(target, env);
-        if (targetError) return reply.code(400).send({ error: targetError });
+      if (!channel) return reply.code(404).send({ error: 'canal no encontrado' });
+      if (!(await requireRole(database, request, reply, channel.workspaceId, 'editor'))) return;
+
+      let config = channel.config;
+      if (parsed.data.config) {
+        const configSchema = configSchemas[channel.type];
+        const validated = configSchema.safeParse(parsed.data.config);
+        if (!validated.success) {
+          return reply.code(400).send({
+            error: `config inválida para un canal ${channel.type}`,
+            issues: validated.error.issues,
+          });
+        }
+
+        const target =
+          channel.type === 'discord'
+            ? (validated.data as { webhookUrl: string }).webhookUrl
+            : channel.type === 'webhook'
+              ? (validated.data as { url: string }).url
+              : null;
+
+        if (target) {
+          const targetError = await channelTargetError(target, env);
+          if (targetError) return reply.code(400).send({ error: targetError });
+        }
+
+        config = validated.data;
       }
 
-      config = validated.data;
-    }
+      const [updated] = await database
+        .update(notificationChannels)
+        .set({
+          ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
+          ...(parsed.data.enabled !== undefined ? { enabled: parsed.data.enabled } : {}),
+          config,
+        })
+        .where(eq(notificationChannels.id, id.data))
+        .returning();
+      if (!updated) throw new Error('sin fila al actualizar el canal');
 
-    const [updated] = await database
-      .update(notificationChannels)
-      .set({
-        ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
-        ...(parsed.data.enabled !== undefined ? { enabled: parsed.data.enabled } : {}),
-        config,
-      })
-      .where(eq(notificationChannels.id, id.data))
-      .returning();
+      await recordAudit(database, {
+        userId: user.id,
+        workspaceId: updated.workspaceId,
+        action: 'channel.update',
+        targetType: 'channel',
+        targetId: updated.id,
+        detail: { fields: Object.keys(parsed.data) },
+        ip: request.ip,
+      });
 
-    return { channel: updated };
-  });
+      return { channel: updated };
+    },
+  );
 
-  app.delete<{ Params: { id: string } }>('/channels/:id', async (request, reply) => {
-    const id = idSchema.safeParse(request.params.id);
-    if (!id.success) return reply.code(400).send({ error: 'id de canal inválido' });
+  app.delete<{ Params: { id: string } }>(
+    '/channels/:id',
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const user = authUser(request);
 
-    const deleted = await database
-      .delete(notificationChannels)
-      .where(eq(notificationChannels.id, id.data))
-      .returning({ id: notificationChannels.id });
+      const id = idSchema.safeParse(request.params.id);
+      if (!id.success) return reply.code(400).send({ error: 'id de canal inválido' });
 
-    if (deleted.length === 0) return reply.code(404).send({ error: 'canal no encontrado' });
+      const [channel] = await database
+        .select()
+        .from(notificationChannels)
+        .where(eq(notificationChannels.id, id.data));
 
-    return reply.code(204).send();
-  });
+      if (!channel) return reply.code(404).send({ error: 'canal no encontrado' });
+      if (!(await requireRole(database, request, reply, channel.workspaceId, 'editor'))) return;
+
+      await database.delete(notificationChannels).where(eq(notificationChannels.id, channel.id));
+
+      await recordAudit(database, {
+        userId: user.id,
+        workspaceId: channel.workspaceId,
+        action: 'channel.delete',
+        targetType: 'channel',
+        targetId: channel.id,
+        detail: { name: channel.name, type: channel.type },
+        ip: request.ip,
+      });
+
+      return reply.code(204).send();
+    },
+  );
 }

@@ -260,3 +260,73 @@ export const deliveries = pgTable(
   },
   (table) => [index('deliveries_due_idx').on(table.status, table.nextAttemptAt)],
 );
+
+/**
+ * Sesión de un usuario: guarda el hash del token de refresco (nunca el
+ * token), quién y desde dónde la abrió, y cuándo deja de valer. La rotación
+ * revoca la usada y emite otra en la misma transacción.
+ */
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull().unique(),
+    userAgent: text('user_agent'),
+    ip: text('ip'),
+    createdAt: createdAt(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('sessions_user_idx').on(table.userId),
+    index('sessions_expires_idx').on(table.expiresAt),
+  ],
+);
+
+/** Clave de API de un usuario (`cnt_…`): se guarda solo su huella y prefijo. */
+export const apiKeys = pgTable(
+  'api_keys',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    /** Primeros caracteres visibles (`cnt_ab12cd34`), para identificarla sin revelarla. */
+    prefix: text('prefix').notNull(),
+    keyHash: text('key_hash').notNull().unique(),
+    createdAt: createdAt(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (table) => [index('api_keys_user_idx').on(table.userId)],
+);
+
+/**
+ * Registro de auditoría: quién hizo qué y sobre qué. `userId` y `workspaceId`
+ * quedan nulos si la entidad desaparece (el rastro no se borra en cascada).
+ */
+export const auditLog = pgTable(
+  'audit_log',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'set null' }),
+    /** Verbo estable en snake_case: `auth.login`, `monitor.create`… */
+    action: text('action').notNull(),
+    targetType: text('target_type'),
+    targetId: text('target_id'),
+    detail: jsonb('detail').$type<Record<string, unknown>>(),
+    ip: text('ip'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('audit_log_created_idx').on(table.createdAt.desc()),
+    index('audit_log_workspace_idx').on(table.workspaceId),
+  ],
+);

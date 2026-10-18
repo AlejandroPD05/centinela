@@ -19,7 +19,8 @@
     "format:check": "prettier --check .",
     "db:generate": "pnpm --filter @centinela/api run db:generate",
     "db:migrate": "pnpm --filter @centinela/api run db:migrate",
-    "db:studio": "pnpm --filter @centinela/api run db:studio"
+    "db:studio": "pnpm --filter @centinela/api run db:studio",
+    "api:cli": "pnpm --filter @centinela/api run cli"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -22,3 +22,11 @@ export type MonitorState = (typeof monitorStates)[number];
 /** Roles dentro de un espacio de trabajo. */
 export const roles = ['admin', 'editor', 'viewer'] as const;
 export type Role = (typeof roles)[number];
+
+/** Rango de privilegio de cada rol: viewer < editor < admin. */
+const roleRank: Record<Role, number> = { viewer: 1, editor: 2, admin: 3 };
+
+/** ¿`role` alcanza el mínimo exigido? (un editor puede todo lo de un viewer). */
+export function hasRole(role: Role, minimum: Role): boolean {
+  return roleRank[role] >= roleRank[minimum];
+}

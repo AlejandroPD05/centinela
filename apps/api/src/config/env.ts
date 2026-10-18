@@ -35,6 +35,12 @@ const envSchema = z.object({
   // Guarda SSRF: desactivable solo para desarrollo local y tests.
   ALLOW_PRIVATE_TARGETS: booleanish(false),
 
+  // Accesos y sesiones (M4).
+  JWT_SECRET: z.string().min(32, 'JWT_SECRET debe tener al menos 32 caracteres'),
+  ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(3_600),
+  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(3_650).default(30),
+  LOGIN_ATTEMPTS_PER_MINUTE: z.coerce.number().int().min(1).max(1_000).default(10),
+
   // Revisión del certificado TLS de los monitores https.
   SSL_RECHECK_HOURS: z.coerce.number().int().min(1).max(720).default(24),
 

@@ -4,9 +4,10 @@ Monitorización de estado para proyectos propios: disponibilidad, latencia,
 certificados SSL y heartbeats, con una status page pública que vigila los
 despliegues de este portfolio.
 
-> **Estado: M3 — notificaciones y heartbeats.** Centinela ya avisa solo: canales
-> de Discord, webhook y email con reintentos y registro de entregas, latidos de
-> entrada y alertas de caducidad SSL. Hoja de ruta completa
+> **Estado: M4 — API pública y accesos.** Todo lo que toca datos pasa por
+> autenticación: sesiones con JWT y rotación de tokens, roles por espacio de
+> trabajo, claves de API para scripts, auditoría de acciones y documentación
+> OpenAPI servida por la propia API. Hoja de ruta completa
 > [aquí](#hoja-de-ruta).
 
 ## Cómo funciona
@@ -49,6 +50,15 @@ Los **latidos de entrada** (`POST/GET /api/heartbeats/:token`) son un monitor
 más: si el ping no llega dentro de periodo + gracia, el worker lo declara
 caído, y cada latido entrante cuenta como un check correcto.
 
+El **acceso** se organiza por espacios de trabajo con tres roles: `viewer`
+(leer), `editor` (crear y editar) y `admin` (además, miembros y auditoría). Las
+sesiones emiten un token de acceso (JWT HS256, una hora) y un token de refresco
+opaco que **rota en cada uso** y se guarda por huella en `sessions`; las
+contraseñas viven como hash scrypt. Para scripts e integraciones hay **claves de
+API** (`cnt_…`, revocables, de solo un vistazo) y toda acción sensible queda en
+el **registro de auditoría**. La API se documenta sola en
+`/api/openapi.json` con una página legible en `/api/docs`.
+
 ## Stack
 
 | Capa         | Elección                                        |
@@ -83,42 +93,53 @@ pnpm install
 Copy-Item .env.example .env
 docker compose up -d
 pnpm db:migrate
+pnpm --filter @centinela/api build
+pnpm api:cli create-user --email tu@correo.com --password "una-contraseña-larga" --workspace centinela
 pnpm dev
 ```
 
 - API: <http://127.0.0.1:4100/api/health>
+- Documentación: <http://127.0.0.1:4100/api/docs>
 - Panel: <http://127.0.0.1:4101> (hace proxy de `/api` hacia la API)
+
+El comando `api:cli create-user` crea el usuario y, si el espacio no existe, lo
+crea y te deja como `admin`. Entra con `POST /api/auth/login` o desde el panel.
 
 ## Configuración
 
 Todas las variables viven en el `.env` de la raíz (ver [`.env.example`](.env.example)):
 
-| Variable                | Por defecto          | Qué hace                                        |
-| ----------------------- | -------------------- | ----------------------------------------------- |
-| `HOST` / `PORT`         | `127.0.0.1` / `4100` | Escucha de la API                               |
-| `DATABASE_URL`          | — (obligatoria)      | Conexión a PostgreSQL                           |
-| `LOG_LEVEL`             | `info`               | Nivel de los logs (pino)                        |
-| `WORKER_ENABLED`        | `true`               | Motor de checks embebido en la API              |
-| `WORKER_TICK_MS`        | `1000`               | Sonda entre ciclos cuando no hay trabajo        |
-| `WORKER_BATCH_SIZE`     | `10`                 | Monitores reclamados por ciclo                  |
-| `WORKER_CONCURRENCY`    | `5`                  | Checks ejecutados en paralelo                   |
-| `ALLOW_PRIVATE_TARGETS` | `false`              | Permite rangos privados (solo desarrollo local) |
-| `SSL_RECHECK_HOURS`     | `24`                 | Cada cuántas horas se revisa el certificado TLS |
-| `RESEND_API_KEY`        | — (opcional)         | Clave de Resend para el canal email             |
-| `EMAIL_FROM`            | — (opcional)         | Remitente verificado en Resend                  |
+| Variable                    | Por defecto          | Qué hace                                             |
+| --------------------------- | -------------------- | ---------------------------------------------------- |
+| `HOST` / `PORT`             | `127.0.0.1` / `4100` | Escucha de la API                                    |
+| `DATABASE_URL`              | — (obligatoria)      | Conexión a PostgreSQL                                |
+| `LOG_LEVEL`                 | `info`               | Nivel de los logs (pino)                             |
+| `WORKER_ENABLED`            | `true`               | Motor de checks embebido en la API                   |
+| `WORKER_TICK_MS`            | `1000`               | Sonda entre ciclos cuando no hay trabajo             |
+| `WORKER_BATCH_SIZE`         | `10`                 | Monitores reclamados por ciclo                       |
+| `WORKER_CONCURRENCY`        | `5`                  | Checks ejecutados en paralelo                        |
+| `ALLOW_PRIVATE_TARGETS`     | `false`              | Permite rangos privados (solo desarrollo local)      |
+| `JWT_SECRET`                | — (obligatoria)      | Firma de los tokens de acceso (mínimo 32 caracteres) |
+| `ACCESS_TOKEN_TTL_SECONDS`  | `3600`               | Vida del token de acceso (JWT)                       |
+| `REFRESH_TOKEN_TTL_DAYS`    | `30`                 | Vida de las sesiones y del token de refresco         |
+| `LOGIN_ATTEMPTS_PER_MINUTE` | `10`                 | Intentos de login por IP y correo                    |
+| `SSL_RECHECK_HOURS`         | `24`                 | Cada cuántas horas se revisa el certificado TLS      |
+| `RESEND_API_KEY`            | — (opcional)         | Clave de Resend para el canal email                  |
+| `EMAIL_FROM`                | — (opcional)         | Remitente verificado en Resend                       |
 
 ## Scripts
 
-| Comando                     | Qué hace                                      |
-| --------------------------- | --------------------------------------------- |
-| `pnpm dev`                  | Arranca shared en watch, API y panel a la vez |
-| `pnpm build`                | Compila todos los paquetes                    |
-| `pnpm typecheck`            | Comprueba tipos en todo el monorepo           |
-| `pnpm test`                 | Ejecuta la suite de Vitest                    |
-| `pnpm lint` / `pnpm format` | ESLint / Prettier                             |
-| `pnpm db:generate`          | Genera una migración a partir del esquema     |
-| `pnpm db:migrate`           | Aplica las migraciones pendientes             |
-| `pnpm db:studio`            | Abre Drizzle Studio                           |
+| Comando                     | Qué hace                                                                     |
+| --------------------------- | ---------------------------------------------------------------------------- |
+| `pnpm dev`                  | Arranca shared en watch, API y panel a la vez                                |
+| `pnpm build`                | Compila todos los paquetes                                                   |
+| `pnpm typecheck`            | Comprueba tipos en todo el monorepo                                          |
+| `pnpm test`                 | Ejecuta la suite de Vitest                                                   |
+| `pnpm lint` / `pnpm format` | ESLint / Prettier                                                            |
+| `pnpm db:generate`          | Genera una migración a partir del esquema                                    |
+| `pnpm db:migrate`           | Aplica las migraciones pendientes                                            |
+| `pnpm db:studio`            | Abre Drizzle Studio                                                          |
+| `pnpm api:cli`              | Utilidades de operación (p. ej. `create-user`); requiere `pnpm build` previo |
 
 ## Diseño
 
@@ -132,7 +153,7 @@ dirección completa (reglas duras, tokens y presupuesto de rendimiento) está en
 - [x] **M1 — Motor de checks:** HTTP y TCP con guarda SSRF, scheduler `SKIP LOCKED` con jitter, máquina de estados con umbrales, integración real contra PostgreSQL
 - [x] **M2 — Histórico:** uptime 24 h / 7 d / 30 d / 90 d, percentiles, incidencias con timeline, estado del certificado SSL
 - [x] **M3 — Notificaciones y heartbeats:** Discord, webhook y email; latidos de entrada; reintentos con backoff y registro de entregas
-- [ ] **M4 — API pública y accesos:** JWT, roles (admin/editor/visor), claves de API, OpenAPI, auditoría
+- [x] **M4 — API pública y accesos:** sesiones JWT con refresco rotatorio, roles por espacio, claves de API, OpenAPI servido por la API y auditoría
 - [ ] **M5 — Status page:** pública con SSE, badges SVG y widget embebible
 - [ ] **M6 — Panel de operador:** dashboard en vivo, gráficas SVG propias, editores, accesibilidad AA
 - [ ] **M7 — Endurecimiento:** dead-man switch, backups, límites y apagado ordenado

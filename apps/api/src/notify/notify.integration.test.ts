@@ -5,14 +5,18 @@ import { asc, eq, sql } from 'drizzle-orm';
 import type { FastifyBaseLogger, FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildServer } from '../app.js';
+import { signAccessToken } from '../auth/jwt.js';
+import { hashPassword } from '../auth/password.js';
 import { loadEnv, loadEnvFileIfPresent } from '../config/env.js';
 import {
   checkResults,
   deliveries,
   incidentEvents,
   incidents,
+  memberships,
   monitors,
   notificationChannels,
+  users,
   workspaces,
 } from '../db/schema.js';
 import {
@@ -31,6 +35,8 @@ const dbAvailable = databaseUrl !== '' && (await canReachDatabase(databaseUrl));
 if (!dbAvailable) {
   console.warn('PostgreSQL no disponible: la prueba de integración de avisos se salta.');
 }
+
+const JWT_SECRET = 'secreto-de-integracion-de-avisos-1234567890';
 
 /** Logger mudo: los tests no ensucian la salida. */
 const silentLog = {
@@ -52,6 +58,7 @@ describe.runIf(dbAvailable)('avisos y latidos — integración con PostgreSQL', 
   let listenerPort = 0;
   let workspaceId: string;
   let heartbeatMonitorId: string;
+  let headers: { authorization: string };
   const received: Array<Record<string, unknown>> = [];
   const heartbeatToken = 'latido-de-prueba-01';
 
@@ -85,6 +92,27 @@ describe.runIf(dbAvailable)('avisos y latidos — integración con PostgreSQL', 
     if (!workspace) throw new Error('no se pudo crear el espacio de trabajo');
     workspaceId = workspace.id;
 
+    // Usuario con acceso al espacio: el CRUD de canales pide token desde M4.
+    const [user] = await db
+      .insert(users)
+      .values({
+        email: 'avisos@example.com',
+        name: 'Personal de avisos',
+        passwordHash: await hashPassword('prueba-de-integracion-2026'),
+      })
+      .returning();
+    if (!user) throw new Error('no se pudo crear el usuario');
+
+    await db.insert(memberships).values({ userId: user.id, workspaceId, role: 'admin' });
+
+    headers = {
+      authorization: `Bearer ${signAccessToken(
+        { sub: user.id, email: user.email, name: user.name },
+        JWT_SECRET,
+        3_600,
+      )}`,
+    };
+
     const [monitor] = await db
       .insert(monitors)
       .values({
@@ -108,6 +136,7 @@ describe.runIf(dbAvailable)('avisos y latidos — integración con PostgreSQL', 
       NODE_ENV: 'test',
       DATABASE_URL: databaseUrl,
       LOG_LEVEL: 'silent',
+      JWT_SECRET,
       // El receptor del test vive en 127.0.0.1: la guarda SSRF debe permitirlo.
       ALLOW_PRIVATE_TARGETS: 'true',
     });
@@ -138,6 +167,7 @@ describe.runIf(dbAvailable)('avisos y latidos — integración con PostgreSQL', 
     const invalid = await app.inject({
       method: 'POST',
       url: '/api/channels',
+      headers,
       payload: { type: 'discord', name: 'sin webhook', workspaceId, config: {} },
     });
     expect(invalid.statusCode).toBe(400);
@@ -145,6 +175,7 @@ describe.runIf(dbAvailable)('avisos y latidos — integración con PostgreSQL', 
     const created = await app.inject({
       method: 'POST',
       url: '/api/channels',
+      headers,
       payload: {
         type: 'webhook',
         name: 'bandeja de pruebas',
@@ -157,6 +188,7 @@ describe.runIf(dbAvailable)('avisos y latidos — integración con PostgreSQL', 
     const duplicate = await app.inject({
       method: 'POST',
       url: '/api/channels',
+      headers,
       payload: {
         type: 'webhook',
         name: 'bandeja de pruebas',
@@ -166,7 +198,7 @@ describe.runIf(dbAvailable)('avisos y latidos — integración con PostgreSQL', 
     });
     expect(duplicate.statusCode).toBe(409);
 
-    const list = await app.inject({ method: 'GET', url: '/api/channels' });
+    const list = await app.inject({ method: 'GET', url: '/api/channels', headers });
     expect(list.statusCode).toBe(200);
     expect(list.json<{ channels: unknown[] }>().channels).toHaveLength(1);
 
@@ -175,6 +207,7 @@ describe.runIf(dbAvailable)('avisos y latidos — integración con PostgreSQL', 
     const disabled = await app.inject({
       method: 'PATCH',
       url: `/api/channels/${channelId}`,
+      headers,
       payload: { enabled: false },
     });
     expect(disabled.statusCode).toBe(200);
@@ -183,6 +216,7 @@ describe.runIf(dbAvailable)('avisos y latidos — integración con PostgreSQL', 
     const reenabled = await app.inject({
       method: 'PATCH',
       url: `/api/channels/${channelId}`,
+      headers,
       payload: { enabled: true },
     });
     expect(reenabled.json<{ channel: { enabled: boolean } }>().channel.enabled).toBe(true);
@@ -193,6 +227,7 @@ describe.runIf(dbAvailable)('avisos y latidos — integración con PostgreSQL', 
       NODE_ENV: 'test',
       DATABASE_URL: databaseUrl,
       LOG_LEVEL: 'silent',
+      JWT_SECRET,
     });
     const strictApp = buildServer({ env: strictEnv, database: ephemeral.db });
     await strictApp.ready();
@@ -200,6 +235,7 @@ describe.runIf(dbAvailable)('avisos y latidos — integración con PostgreSQL', 
     const blocked = await strictApp.inject({
       method: 'POST',
       url: '/api/channels',
+      headers,
       payload: {
         type: 'webhook',
         name: 'metadatos',

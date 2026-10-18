@@ -1,12 +1,18 @@
 import helmet from '@fastify/helmet';
 import Fastify, { type FastifyInstance } from 'fastify';
+import { createAuthenticator } from './auth/plugin.js';
 import type { Env } from './config/env.js';
 import type { Database } from './db/client.js';
 import { loggerOptions } from './logger.js';
+import { apiKeyRoutes } from './routes/api-keys.js';
+import { auditRoutes } from './routes/audit.js';
+import { authRoutes } from './routes/auth.js';
 import { channelRoutes } from './routes/channels.js';
 import { healthRoutes } from './routes/health.js';
 import { heartbeatRoutes } from './routes/heartbeats.js';
 import { monitorRoutes } from './routes/monitors.js';
+import { openApiRoutes } from './routes/openapi.js';
+import { workspaceRoutes } from './routes/workspaces.js';
 
 export interface BuildServerOptions {
   env: Env;
@@ -20,6 +26,10 @@ export function buildServer({ env, database }: BuildServerOptions): FastifyInsta
     logger: loggerOptions(env),
     trustProxy: true,
   });
+
+  // Cada petición lleva su contexto de autenticación (null hasta que el
+  // preHandler `authenticate` la rellena).
+  app.decorateRequest('auth', null);
 
   app.register(helmet, {
     // La CSP se definirá cuando la API sirva el panel y la status page (M5).
@@ -39,13 +49,23 @@ export function buildServer({ env, database }: BuildServerOptions): FastifyInsta
         name: 'centinela',
         version: '0.1.0',
         health: '/api/health',
+        docs: '/api/docs',
       }));
 
+      // Públicas: salud, latidos y documentación.
       healthRoutes(api, database);
+      openApiRoutes(api);
+
       if (database) {
-        monitorRoutes(api, database);
+        const authenticate = createAuthenticator(database, env);
+
+        authRoutes(api, database, env, authenticate);
+        workspaceRoutes(api, database, authenticate);
+        apiKeyRoutes(api, database, authenticate);
+        auditRoutes(api, database, authenticate);
+        monitorRoutes(api, database, authenticate);
         heartbeatRoutes(api, database);
-        channelRoutes(api, database, env);
+        channelRoutes(api, database, env, authenticate);
       }
     },
     { prefix: '/api' },
