@@ -4,10 +4,12 @@ Monitorización de estado para proyectos propios: disponibilidad, latencia,
 certificados SSL y heartbeats, con una status page pública que vigila los
 despliegues de este portfolio.
 
-> **Estado: M8 — Listo para desplegar.** Pruebas de extremo a extremo con
-> Playwright, semilla reproducible, panel servido por la propia API en
-> producción y guía de Render + Neon paso a paso. Hoja de ruta completa
-> [aquí](#hoja-de-ruta).
+> **Estado: implementación completa (M0–M10).** Motor de checks, histórico,
+> avisos y status page pública, panel de operador, endurecimiento, E2E con
+> Playwright, servidor MCP para asistentes y ficha en el portfolio. Lo único
+> pendiente es publicar (repositorio, Render + Neon con la
+> [guía de despliegue](docs/DEPLOYMENT.md)) y añadir los enlaces a la ficha.
+> Hoja de ruta completa [aquí](#hoja-de-ruta).
 
 ## Cómo funciona
 
@@ -223,7 +225,7 @@ un espacio, `CENTINELA_WORKSPACE` lo fija por defecto.
 - [x] **M7 — Endurecimiento:** guarda SSRF en el socket, SSE multi-instancia por `LISTEN/NOTIFY`, límites por IP y por token, watchdog + dead-man switch, copias de seguridad y apagado ordenado ([manual de operación](docs/OPERATIONS.md))
 - [x] **M8 — E2E y despliegue:** pruebas de extremo a extremo con servidor víctima y CI, semilla reproducible (`db:seed`), panel servido por la API en producción y guía Render + Neon ([despliegue](docs/DEPLOYMENT.md))
 - [x] **M9 — Servidor MCP:** estado e incidencias como herramientas para asistentes (`apps/mcp`, solo lectura y con clave de API)
-- [ ] **M10 — Ficha en el portfolio:** captura, tecnologías y demo
+- [x] **M10 — Ficha en el portfolio:** captura real del panel en 1280 × 800, resumen técnico y pila; los enlaces a repositorio y demo se añaden al publicarlos
 
 ## Licencia
 
