@@ -11,6 +11,7 @@ import {
   type WebhookChannelConfig,
 } from '@centinela/shared';
 import { RESEND_BASE_URL } from './config.js';
+import { safeFetch } from '../checks/ssrf.js';
 
 export interface ChannelTarget {
   type: NotificationChannelType;
@@ -24,6 +25,8 @@ export interface SendOptions {
   emailFrom?: string | undefined;
   /** Base de la API de Resend; los tests apuntan a un servidor local. */
   resendBaseUrl?: string;
+  /** Permite destinos privados (solo desarrollo y tests, como los checks). */
+  allowPrivateTargets?: boolean;
 }
 
 export type SendResult = { ok: true } | { ok: false; error: string };
@@ -62,12 +65,16 @@ async function sendDiscord(
     return { ok: false, error: 'el canal Discord no tiene webhook URL configurado' };
   }
 
-  const response = await fetch(config.webhookUrl, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(buildDiscordMessage(payload)),
-    signal: AbortSignal.timeout(options.timeoutMs),
-  });
+  const response = await safeFetch(
+    config.webhookUrl,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(buildDiscordMessage(payload)),
+      signal: AbortSignal.timeout(options.timeoutMs),
+    },
+    { allowPrivateTargets: options.allowPrivateTargets ?? false },
+  );
 
   if (!response.ok) return { ok: false, error: `Discord respondió ${response.status}` };
   return { ok: true };
@@ -82,12 +89,16 @@ async function sendWebhook(
     return { ok: false, error: 'el canal webhook no tiene URL configurada' };
   }
 
-  const response = await fetch(config.url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(buildWebhookBody(payload)),
-    signal: AbortSignal.timeout(options.timeoutMs),
-  });
+  const response = await safeFetch(
+    config.url,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(buildWebhookBody(payload)),
+      signal: AbortSignal.timeout(options.timeoutMs),
+    },
+    { allowPrivateTargets: options.allowPrivateTargets ?? false },
+  );
 
   if (!response.ok) return { ok: false, error: `el webhook respondió ${response.status}` };
   return { ok: true };
@@ -106,20 +117,24 @@ async function sendEmail(
     };
   }
 
-  const response = await fetch(`${options.resendBaseUrl ?? RESEND_BASE_URL}/emails`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${options.resendApiKey}`,
+  const response = await safeFetch(
+    `${options.resendBaseUrl ?? RESEND_BASE_URL}/emails`,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${options.resendApiKey}`,
+      },
+      body: JSON.stringify({
+        from: options.emailFrom,
+        to: [config.to],
+        subject: buildNotificationTitle(payload),
+        text: buildNotificationText(payload),
+      }),
+      signal: AbortSignal.timeout(options.timeoutMs),
     },
-    body: JSON.stringify({
-      from: options.emailFrom,
-      to: [config.to],
-      subject: buildNotificationTitle(payload),
-      text: buildNotificationText(payload),
-    }),
-    signal: AbortSignal.timeout(options.timeoutMs),
-  });
+    { allowPrivateTargets: options.allowPrivateTargets ?? false },
+  );
 
   if (!response.ok) return { ok: false, error: `Resend respondió ${response.status}` };
   return { ok: true };

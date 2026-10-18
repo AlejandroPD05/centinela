@@ -1,5 +1,7 @@
+import { lookup as dnsLookupCallback } from 'node:dns';
 import { lookup } from 'node:dns/promises';
-import { BlockList, isIP } from 'node:net';
+import { BlockList, isIP, type LookupFunction } from 'node:net';
+import { Agent, fetch as undiciFetch, type Dispatcher } from 'undici';
 
 /** El destino apunta a un rango que la guarda SSRF no permite tocar. */
 export class SsrfBlockedError extends Error {
@@ -189,4 +191,99 @@ function extractDottedIpv4(ip: string): string | null {
 
   // Prefijo desconocido con IPv4 embebida: mejor bloquear que adivinar.
   return '0.0.0.0';
+}
+
+// ── Guarda en el socket (anti DNS rebinding) ────────────────────────────────
+// La comprobación previa resuelve el nombre, pero `fetch` vuelve a resolver por
+// su cuenta un instante después: entre las dos ventanas cabe un DNS que cambie
+// la respuesta (rebinding). Este agente valida cada dirección EN el momento de
+// abrir el socket, así que la conexión real nunca va a un rango prohibido
+// aunque el DNS haya cambiado entre medias.
+
+type ResolveAll = (
+  hostname: string,
+  options: { all: true; verbatim: true },
+  callback: (
+    error: NodeJS.ErrnoException | null,
+    addresses: Array<{ address: string; family: number }>,
+  ) => void,
+) => void;
+
+const resolveAll: ResolveAll = (hostname, options, callback) => {
+  dnsLookupCallback(hostname, options, callback);
+};
+
+/**
+ * Crea un `lookup` de socket con la guarda aplicada: valida todas las
+ * direcciones resueltas y entrega las permitidas. El resolvedor se inyecta en
+ * los tests; en producción es el `dns.lookup` de Node.
+ */
+export function createGuardedLookup(resolver: ResolveAll = resolveAll): LookupFunction {
+  return function guardedLookup(hostname, options, callback): void {
+    resolver(hostname, { all: true, verbatim: true }, (error, addresses) => {
+      if (error) {
+        callback(error, '');
+        return;
+      }
+
+      for (const entry of addresses) {
+        if (isBlockedIp(entry.address)) {
+          callback(
+            new SsrfBlockedError(
+              `«${hostname}» resuelve a una dirección bloqueada por seguridad (${entry.address})`,
+            ),
+            '',
+          );
+          return;
+        }
+      }
+
+      const filtered =
+        options.family === 4 || options.family === 6
+          ? addresses.filter((entry) => entry.family === options.family)
+          : addresses;
+      const usable = filtered.length > 0 ? filtered : addresses;
+
+      if (options.all) {
+        callback(null, usable);
+        return;
+      }
+
+      const first = usable[0]!;
+      callback(null, first.address, first.family);
+    });
+  };
+}
+
+/** Conexiones con la guarda pegada al socket (producción). */
+const guardedAgent = new Agent({ connect: { lookup: createGuardedLookup() } });
+
+/** Conexiones sin guarda, solo para `ALLOW_PRIVATE_TARGETS` (desarrollo). */
+const openAgent = new Agent();
+
+/** El agente de conexiones que corresponde según la configuración. */
+export function agentFor(allowPrivateTargets: boolean): Dispatcher {
+  return allowPrivateTargets ? openAgent : guardedAgent;
+}
+
+/**
+ * `fetch` para destinos vigilados: valida protocolo y host antes de salir y,
+ * con la guarda activa, la fija al socket para cerrar la ventana de rebinding.
+ */
+export async function safeFetch(
+  target: string | URL,
+  init: RequestInit = {},
+  options: SsrfGuardOptions,
+): Promise<Response> {
+  const url = typeof target === 'string' ? new URL(target) : target;
+  await assertAllowedUrl(url, options);
+
+  // Se usa el `fetch` de undici (no el global) para que el agente y el
+  // despachador sean de la misma versión; la respuesta se expone con el tipo
+  // del `fetch` global, que es el que ven las rutas y los checkers.
+  const response = await undiciFetch(url, {
+    ...init,
+    dispatcher: agentFor(options.allowPrivateTargets),
+  });
+  return response as unknown as Response;
 }

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { assertAllowedUrl, assertHostAllowed, isBlockedIp, SsrfBlockedError } from './ssrf.js';
+import {
+  assertAllowedUrl,
+  assertHostAllowed,
+  createGuardedLookup,
+  isBlockedIp,
+  safeFetch,
+  SsrfBlockedError,
+} from './ssrf.js';
 
 describe('isBlockedIp — rangos IPv4', () => {
   it.each([
@@ -108,5 +115,118 @@ describe('assertAllowedUrl', () => {
     await expect(
       assertAllowedUrl(new URL('https://example.com/estado'), { allowPrivateTargets: false }),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe('createGuardedLookup — la guarda pegada al socket', () => {
+  const resolverFalso =
+    (addresses: Array<{ address: string; family: number }>) =>
+    (
+      _hostname: string,
+      _options: { all: true; verbatim: true },
+      callback: (
+        error: NodeJS.ErrnoException | null,
+        out: Array<{ address: string; family: number }>,
+      ) => void,
+    ): void => {
+      callback(null, addresses);
+    };
+
+  // Ejecuta el lookup y resume el callback en una promesa.
+  const resolver = (
+    lookup: ReturnType<typeof createGuardedLookup>,
+    options: { family?: number; all?: boolean } = {},
+  ) =>
+    new Promise<{
+      error: Error | null;
+      address?: string | Array<{ address: string; family: number }>;
+      family?: number;
+    }>((resolve) => {
+      lookup('objetivo.test', options, (error, address, family) =>
+        resolve({ error, address, family }),
+      );
+    });
+
+  it('entrega la primera dirección cuando el resolvedor da varias', async () => {
+    const lookup = createGuardedLookup(
+      resolverFalso([
+        { address: '93.184.216.34', family: 4 },
+        { address: '2606:2800:220:1::1', family: 6 },
+      ]),
+    );
+
+    await expect(resolver(lookup)).resolves.toEqual({
+      error: null,
+      address: '93.184.216.34',
+      family: 4,
+    });
+  });
+
+  it('bloquea el socket si el DNS responde con una dirección prohibida', async () => {
+    const lookup = createGuardedLookup(resolverFalso([{ address: '127.0.0.1', family: 4 }]));
+    const { error } = await resolver(lookup);
+
+    expect(error).toBeInstanceOf(SsrfBlockedError);
+    expect(error?.message).toContain('127.0.0.1');
+  });
+
+  it('bloquea aunque solo una de las direcciones sea privada (rebinding selectivo)', async () => {
+    const lookup = createGuardedLookup(
+      resolverFalso([
+        { address: '93.184.216.34', family: 4 },
+        { address: '10.0.0.7', family: 4 },
+      ]),
+    );
+
+    const { error } = await resolver(lookup);
+    expect(error).toBeInstanceOf(SsrfBlockedError);
+  });
+
+  it('con `all` entrega la lista entera y respeta la familia pedida', async () => {
+    const direcciones = [
+      { address: '93.184.216.34', family: 4 },
+      { address: '2606:2800:220:1::1', family: 6 },
+    ];
+
+    const todas = await resolver(createGuardedLookup(resolverFalso(direcciones)), { all: true });
+    expect(todas.address).toEqual(direcciones);
+
+    const soloV6 = await resolver(createGuardedLookup(resolverFalso(direcciones)), {
+      all: true,
+      family: 6,
+    });
+    expect(soloV6.address).toEqual([{ address: '2606:2800:220:1::1', family: 6 }]);
+  });
+
+  it('propaga los errores del resolvedor sin tocarlos', async () => {
+    const lookup = createGuardedLookup((_hostname, _options, callback) => {
+      callback(Object.assign(new Error('ENOTFOUND'), { code: 'ENOTFOUND' }), []);
+    });
+
+    const { error } = await resolver(lookup);
+    expect(error?.message).toBe('ENOTFOUND');
+  });
+});
+
+describe('safeFetch — validación previa y de socket', () => {
+  it('rechaza IPs literales privadas antes de salir a la red', async () => {
+    await expect(
+      safeFetch('http://127.0.0.1:9/', {}, { allowPrivateTargets: false }),
+    ).rejects.toBeInstanceOf(SsrfBlockedError);
+  });
+
+  it('rechaza protocolos que no sean http o https', async () => {
+    await expect(
+      safeFetch('ftp://example.com/', {}, { allowPrivateTargets: false }),
+    ).rejects.toThrow('protocolo');
+  });
+
+  it('con allowPrivateTargets deja pasar el destino privado (y falla al conectar, no por la guarda)', async () => {
+    const fallo = await safeFetch('http://127.0.0.1:9/', {}, { allowPrivateTargets: true }).catch(
+      (error: unknown) => error,
+    );
+
+    expect(fallo).toBeInstanceOf(Error);
+    expect(fallo).not.toBeInstanceOf(SsrfBlockedError);
   });
 });

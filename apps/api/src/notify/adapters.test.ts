@@ -69,6 +69,7 @@ describe('sendDelivery', () => {
 
   const options = (overrides: Partial<SendOptions> = {}): SendOptions => ({
     timeoutMs: 2000,
+    allowPrivateTargets: true, // los tests hablan con servidores locales
     ...overrides,
   });
 

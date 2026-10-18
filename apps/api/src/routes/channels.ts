@@ -298,6 +298,7 @@ export function channelRoutes(
           timeoutMs: NOTIFICATION_TIMEOUT_MS,
           resendApiKey: env.RESEND_API_KEY,
           emailFrom: env.EMAIL_FROM,
+          allowPrivateTargets: env.ALLOW_PRIVATE_TARGETS,
         },
       );
 

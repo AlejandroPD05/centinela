@@ -1,5 +1,5 @@
 import { CheckTimeoutError, describeCheckError } from './errors.js';
-import { assertAllowedUrl, SsrfBlockedError } from './ssrf.js';
+import { safeFetch, SsrfBlockedError } from './ssrf.js';
 import type { CheckOutcome } from './types.js';
 
 export interface HttpCheckOptions {
@@ -81,7 +81,7 @@ export async function checkHttp(rawUrl: string, options: HttpCheckOptions): Prom
   }
 }
 
-/** Sigue hasta 5 redirecciones validando cada destino con la guarda SSRF. */
+/** Sigue hasta 5 redirecciones; la guarda valida cada salto (host y socket). */
 async function fetchFollowingSafeRedirects(
   initial: URL,
   options: HttpCheckOptions,
@@ -91,14 +91,16 @@ async function fetchFollowingSafeRedirects(
   let method = options.method;
 
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    await assertAllowedUrl(url, { allowPrivateTargets: options.allowPrivateTargets });
-
-    const response = await fetch(url, {
-      method,
-      redirect: 'manual',
-      signal,
-      headers: { 'user-agent': USER_AGENT, accept: '*/*' },
-    });
+    const response = await safeFetch(
+      url,
+      {
+        method,
+        redirect: 'manual',
+        signal,
+        headers: { 'user-agent': USER_AGENT, accept: '*/*' },
+      },
+      { allowPrivateTargets: options.allowPrivateTargets },
+    );
 
     if (!isRedirect(response.status)) return response;
 

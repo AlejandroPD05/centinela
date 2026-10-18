@@ -98,6 +98,7 @@ async function runDeliveryBatch(deps: WorkerDeps): Promise<number> {
         timeoutMs: NOTIFICATION_TIMEOUT_MS,
         resendApiKey: deps.config.resendApiKey,
         emailFrom: deps.config.emailFrom,
+        allowPrivateTargets: deps.config.allowPrivateTargets,
       });
 
       if (result.ok) {
