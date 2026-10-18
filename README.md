@@ -4,11 +4,10 @@ Monitorización de estado para proyectos propios: disponibilidad, latencia,
 certificados SSL y heartbeats, con una status page pública que vigila los
 despliegues de este portfolio.
 
-> **Estado: M4 — API pública y accesos.** Todo lo que toca datos pasa por
-> autenticación: sesiones con JWT y rotación de tokens, roles por espacio de
-> trabajo, claves de API para scripts, auditoría de acciones y documentación
-> OpenAPI servida por la propia API. Hoja de ruta completa
-> [aquí](#hoja-de-ruta).
+> **Estado: M5 — Status page.** La cara pública ya existe: status page servida
+> por la API sin framework (SSE opcional y sin cookies), badges SVG con ETag y
+> widget embebible, con el gate de diseño `design-taste-frontend` pasado sobre
+> la página viva. Hoja de ruta completa [aquí](#hoja-de-ruta).
 
 ## Cómo funciona
 
@@ -58,6 +57,14 @@ contraseñas viven como hash scrypt. Para scripts e integraciones hay **claves d
 API** (`cnt_…`, revocables, de solo un vistazo) y toda acción sensible queda en
 el **registro de auditoría**. La API se documenta sola en
 `/api/openapi.json` con una página legible en `/api/docs`.
+
+La **status page pública** (`/status/:slug`) sale del servidor sin framework:
+HTML con la piel de la consola, cinta de 90 días, cifras e incidencias. Sin
+JavaScript se lee igual; con SSE (`/status/:slug/events`) los tiempos y las
+lámparas se refrescan en vivo, y solo se publican los monitores marcados como
+públicos. Los **badges SVG** (`/badge/:slug/:monitor.svg`) van con `ETag` y
+caché de un minuto para el README, y el **widget** (`/embed/:slug`) es la misma
+página en modo compacto para incrustar en otra web.
 
 ## Stack
 
@@ -154,7 +161,7 @@ dirección completa (reglas duras, tokens y presupuesto de rendimiento) está en
 - [x] **M2 — Histórico:** uptime 24 h / 7 d / 30 d / 90 d, percentiles, incidencias con timeline, estado del certificado SSL
 - [x] **M3 — Notificaciones y heartbeats:** Discord, webhook y email; latidos de entrada; reintentos con backoff y registro de entregas
 - [x] **M4 — API pública y accesos:** sesiones JWT con refresco rotatorio, roles por espacio, claves de API, OpenAPI servido por la API y auditoría
-- [ ] **M5 — Status page:** pública con SSE, badges SVG y widget embebible
+- [x] **M5 — Status page:** pública con SSE, badges SVG y widget embebible
 - [ ] **M6 — Panel de operador:** dashboard en vivo, gráficas SVG propias, editores, accesibilidad AA
 - [ ] **M7 — Endurecimiento:** dead-man switch, backups, límites y apagado ordenado
 - [ ] **M8 — E2E y despliegue:** Playwright con servidor víctima, seed real, Render + Neon

@@ -12,6 +12,7 @@ import { healthRoutes } from './routes/health.js';
 import { heartbeatRoutes } from './routes/heartbeats.js';
 import { monitorRoutes } from './routes/monitors.js';
 import { openApiRoutes } from './routes/openapi.js';
+import { statusRoutes } from './routes/status.js';
 import { workspaceRoutes } from './routes/workspaces.js';
 
 export interface BuildServerOptions {
@@ -32,8 +33,12 @@ export function buildServer({ env, database }: BuildServerOptions): FastifyInsta
   app.decorateRequest('auth', null);
 
   app.register(helmet, {
-    // La CSP se definirá cuando la API sirva el panel y la status page (M5).
+    // La CSP se definirá cuando la API sirva el panel (M6). Sin frameguard:
+    // el widget se incrusta en otras webs (la ruta /embed fija su propia
+    // política) y los badges se consumen cross-origin desde los READMEs.
     contentSecurityPolicy: false,
+    frameguard: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
   });
 
   // Los latidos pueden llegar sin cuerpo o con un content-type raro (curl,
@@ -70,6 +75,14 @@ export function buildServer({ env, database }: BuildServerOptions): FastifyInsta
     },
     { prefix: '/api' },
   );
+
+  // Superficies públicas de raíz: status page, widget, badges y fuentes.
+  if (database) {
+    const db = database;
+    app.register(async (publico) => {
+      statusRoutes(publico, db);
+    });
+  }
 
   return app;
 }

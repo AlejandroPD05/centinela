@@ -27,7 +27,10 @@ lámparas de torre: verde fijo (arriba), ámbar intermitente (degradado), rojo f
 
 1. **Color = estado.** La única croma de la interfaz son las lámparas de estado.
    El rojo de señal (`#e61919`) queda reservado para la marca y las alertas: los
-   elementos interactivos son monocromos (tinta sobre sustrato).
+   elementos interactivos son monocromos (tinta sobre sustrato). Cuando el rojo
+   pinta texto pequeño (marca, avisos, duración abierta) usa su paso legible
+   `--color-hazard-ink` (`#f53b2f`, contraste ≥ 4,5:1); `#e61919` queda para
+   lámparas, cintas y titularización grande.
 2. **Geometría de 90°**: cero `border-radius`, cero sombras, cero gradientes,
    cero glass/backdrop-blur (salvo overlay fijo si algún día existe).
 3. **Líneas estructurales sí**: la retícula visible de 1 px separa zonas
@@ -53,6 +56,7 @@ lámparas de torre: verde fijo (arriba), ámbar intermitente (degradado), rojo f
 | `--color-ink-dim`   | `#9a9c99`     | Metadatos y texto secundario                 |
 | `--color-line`      | `#26282c`     | Líneas estructurales de 1 px                 |
 | `--color-hazard`    | `#e61919`     | Rojo de señal: marca y alertas               |
+| `--color-hazard-ink`| `#f53b2f`     | Rojo de señal legible en texto pequeño (AA)  |
 | `--color-lamp-up`   | `#46c46a`     | Lámpara: servicio arriba                     |
 | `--color-lamp-warn` | `#e0a32e`     | Lámpara: degradado                           |
 | `--color-lamp-down` | `#e61919`     | Lámpara: caído                               |
@@ -79,3 +83,34 @@ lámparas de torre: verde fijo (arriba), ámbar intermitente (degradado), rojo f
 - Consola: JS inicial < 140 KB gzip; gráficas SVG propias (sin librería de charts).
 - Fuentes: subsetting + self-host antes de publicar; solo los pesos usados.
 - Cero imágenes decorativas: la interfaz se dibuja con HTML, CSS y SVG.
+
+## Gate `design-taste-frontend` (M5)
+
+La status page viva se pasa por los dos scripts de la skill antes de publicar.
+Acta de M5 (datos de demo sembrados, Chrome headless a 1440 / 768 / 390):
+
+- `lint.mjs` — **0 FAIL**, 3 WARN de numeración (el reloj usa `padStart`, que la
+  propia regla permite). Los `taste-skill-ignore` por línea quedan reducidos a
+  lo que estas reglas duras exigen: mono-dominancia y retícula (`@font-face` y
+  `:root`).
+- `inspect.mjs` — **0 FAIL**, 1 WARN (`font-count`), con las allowances
+  justificadas abajo. Arreglos reales que salieron del gate: cifras en línea
+  para que ninguna etiqueta quede apilada encima de un titular, vacío amplio
+  antes del rótulo final, metadata a 13 px (nada legible por debajo), titular al
+  ≥ 4,5 vw y paso legible del rojo (`--color-hazard-ink`) en texto pequeño.
+- Allowances, todas derivadas de reglas de este documento: `mono` y
+  `micro-label` (reglas 4–5: la voz de datos es mono en versalitas), `hairline`
+  (regla 3: retícula visible de 1 px), `few-pictures`, `no-real-pictures` y
+  `no-footage` (presupuesto: todo se dibuja con HTML, CSS y SVG) y `still-page`
+  (el navegador de esta máquina reporta `prefers-reduced-motion: reduce` y la
+  página apaga el motion como manda la regla 7; con `no-preference`, el mismo
+  grabador de la skill cuenta 631 elementos en movimiento).
+- WARN restante defendido: `font-count` — las tres familias son exactamente las
+  tres voces que fija la regla 4, no una deriva.
+
+Para repetirlo (con la API en marcha):
+
+```
+node <skill>/scripts/lint.mjs apps/api/src/public apps/api/src/routes/status.ts
+node <skill>/scripts/inspect.mjs http://127.0.0.1:4100/status/<slug> --out <tmp> --allow mono,hairline,micro-label,few-pictures,no-real-pictures,no-footage,still-page
+```

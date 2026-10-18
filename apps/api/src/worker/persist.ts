@@ -4,6 +4,7 @@ import type { MonitorRow } from '../checks/run.js';
 import type { CheckOutcome } from '../checks/types.js';
 import type { Database } from '../db/client.js';
 import { checkResults, incidentEvents, incidents, monitors } from '../db/schema.js';
+import { publish } from '../events/hub.js';
 import { buildIncidentPayload } from '../notify/payload.js';
 import { enqueueDeliveries } from '../notify/queue.js';
 
@@ -122,6 +123,19 @@ export async function persistOutcome(
         });
       }
     }
+  });
+
+  // Las páginas de estado con SSE abierto reciben el aviso ya dentro del
+  // mismo proceso (el worker va embebido en la API). Sin oyentes, un no-op.
+  publish(monitor.workspaceId, {
+    type: 'check',
+    monitorId: monitor.id,
+    monitorSlug: monitor.slug,
+    state: transition.state,
+    status: outcome.status,
+    latencyMs: outcome.latencyMs ?? null,
+    changed: transition.changed,
+    at: checkedAt.toISOString(),
   });
 
   return { state: transition.state, changed: transition.changed, incidentId };
