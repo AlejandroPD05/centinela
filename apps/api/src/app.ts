@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { createAuthenticator } from './auth/plugin.js';
 import type { Env } from './config/env.js';
 import type { Database } from './db/client.js';
+import { startStatusBridge } from './events/bridge.js';
 import { loggerOptions } from './logger.js';
 import { apiKeyRoutes } from './routes/api-keys.js';
 import { auditRoutes } from './routes/audit.js';
@@ -33,6 +34,14 @@ export function buildServer({ env, database }: BuildServerOptions): FastifyInsta
   // Cada petición lleva su contexto de autenticación (null hasta que el
   // preHandler `authenticate` la rellena).
   app.decorateRequest('auth', null);
+
+  // Puente de avisos en vivo: escucha el canal de PostgreSQL (en el que
+  // publica el worker, esté donde esté) y lo reparte entre las conexiones SSE
+  // de este proceso. Se cierra con el servidor.
+  if (database) {
+    const bridge = startStatusBridge(env.DATABASE_URL, app.log);
+    app.addHook('onClose', () => bridge.stop());
+  }
 
   app.register(helmet, {
     // La CSP se definirá cuando la API sirva el panel (M6). Sin frameguard:

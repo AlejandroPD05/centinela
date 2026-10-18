@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { listenerCount, publish, subscribe, type StatusEvent } from '../events/hub.js';
+import {
+  listenerCount,
+  publish,
+  shutdown,
+  subscribe,
+  totalListenerCount,
+  type StatusEvent,
+} from '../events/hub.js';
 import { renderBadge } from './badge.js';
 import { TAPE_DAYS, type PublicMonitorStatus, type TapeDay } from './queries.js';
 import {
@@ -326,5 +333,17 @@ describe('buzón de avisos', () => {
 
     bad();
     good();
+  });
+
+  it('shutdown() despide a todos los oyentes con un bye y vacía el buzón', () => {
+    const received: StatusEvent[] = [];
+    subscribe('espacio-4', (item) => received.push(item));
+    subscribe('espacio-5', (item) => received.push(item));
+    expect(totalListenerCount()).toBe(2);
+
+    shutdown();
+
+    expect(received).toEqual([{ type: 'bye' }, { type: 'bye' }]);
+    expect(totalListenerCount()).toBe(0);
   });
 });

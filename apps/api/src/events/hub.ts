@@ -1,7 +1,7 @@
 import type { CheckStatus, MonitorState } from '@centinela/shared';
 
-/** Aviso en vivo para las páginas de estado (SSE). */
-export interface StatusEvent {
+/** Aviso de un check para las páginas de estado (SSE). */
+export interface CheckEvent {
   type: 'check';
   monitorId: string;
   monitorSlug: string;
@@ -15,13 +15,20 @@ export interface StatusEvent {
   at: string;
 }
 
+/** Despedida: el proceso se apaga y las conexiones SSE cierran en orden. */
+export interface ByeEvent {
+  type: 'bye';
+}
+
+export type StatusEvent = CheckEvent | ByeEvent;
+
 type Listener = (event: StatusEvent) => void;
 
 /**
  * Buzón en memoria de avisos por espacio de trabajo, para las conexiones SSE
- * de la status page. Vive en el proceso de la API (el worker va embebido), así
- * que publicar y suscribirse es una llamada de función; si algún día corren
- * varias instancias, esto se mudará a `LISTEN/NOTIFY` de PostgreSQL.
+ * de la status page. Los procesos no se hablan entre ellos: quien tiene el
+ * resultado lo publica en el canal LISTEN/NOTIFY de PostgreSQL (events/bridge)
+ * y aquí se reparte lo que llega, venga del worker local o de otra instancia.
  */
 const listeners = new Map<string, Set<Listener>>();
 
@@ -54,4 +61,26 @@ export function publish(workspaceId: string, event: StatusEvent): void {
 /** Oyentes activos de un espacio (diagnóstico y tests). */
 export function listenerCount(workspaceId: string): number {
   return listeners.get(workspaceId)?.size ?? 0;
+}
+
+/** Oyentes activos en todo el proceso, para el tope de conexiones SSE. */
+export function totalListenerCount(): number {
+  let total = 0;
+  for (const set of listeners.values()) total += set.size;
+  return total;
+}
+
+/** Despide a todos los oyentes (apagado ordenado) y vacía el buzón. */
+export function shutdown(): void {
+  for (const set of listeners.values()) {
+    for (const listener of set) {
+      try {
+        listener({ type: 'bye' });
+      } catch {
+        // El proceso se va: un oyente roto ya no importa.
+      }
+    }
+  }
+
+  listeners.clear();
 }

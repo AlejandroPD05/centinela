@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Database } from '../db/client.js';
-import { subscribe } from '../events/hub.js';
+import { subscribe, totalListenerCount } from '../events/hub.js';
 import { renderBadge } from '../public/badge.js';
 import {
   publicMonitorCard,
@@ -19,6 +19,10 @@ import { renderEmbedPage, renderNotFoundPage, renderStatusPage } from '../public
  * Superficies públicas, fuera del prefijo /api: la status page, su flujo SSE,
  * el widget embebible, los badges SVG y las fuentes self-host.
  */
+
+/** Tope de conexiones SSE por proceso; más allá, el cliente recibe 503. */
+const MAX_SSE_LISTENERS = 500;
+
 export function statusRoutes(app: FastifyInstance, database: Database): void {
   app.get('/status/:slug', async (request, reply) => {
     const { slug } = request.params as { slug: string };
@@ -56,6 +60,13 @@ export function statusRoutes(app: FastifyInstance, database: Database): void {
 
     const publicIds = new Set(await publicMonitorIds(database, workspace.id));
 
+    if (totalListenerCount() >= MAX_SSE_LISTENERS) {
+      return reply
+        .code(503)
+        .header('retry-after', '10')
+        .send({ error: 'demasiadas conexiones en vivo; reintenta en unos segundos' });
+    }
+
     reply.hijack();
 
     const socket = reply.raw;
@@ -73,7 +84,17 @@ export function statusRoutes(app: FastifyInstance, database: Database): void {
     let unsubscribe: () => void = () => {};
 
     unsubscribe = subscribe(workspace.id, (event) => {
-      if (closed || !publicIds.has(event.monitorId)) return;
+      if (closed) return;
+
+      if (event.type === 'bye') {
+        // El proceso se apaga: se despide para que el navegador reconecte
+        // solo cuando el servicio vuelva.
+        close();
+        socket.end('event: bye\ndata: {}\n\n');
+        return;
+      }
+
+      if (!publicIds.has(event.monitorId)) return;
       socket.write(`data: ${JSON.stringify(event)}\n\n`);
     });
 

@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildServer } from '../app.js';
 import { loadEnv, loadEnvFileIfPresent } from '../config/env.js';
 import { checkResults, incidents, monitors, workspaces } from '../db/schema.js';
-import { listenerCount, publish } from '../events/hub.js';
+import { listenerCount, publish, shutdown as shutdownHub } from '../events/hub.js';
 import {
   canReachDatabase,
   createEphemeralDatabase,
@@ -313,7 +313,21 @@ describe.runIf(dbAvailable)('estado público — integración con PostgreSQL', (
     expect(buffer).not.toContain('"monitorSlug":"panel"');
     expect(buffer).toContain('data: ');
 
-    controller.abort();
+    // Apagado ordenado: el proceso se despide y la conexión cierra sola.
+    shutdownHub();
+    let terminado = false;
+    while (!buffer.includes('event: bye') && !terminado) {
+      const { value, done } = await reader.read();
+      if (done) {
+        terminado = true;
+        break;
+      }
+      buffer += decoder.decode(value, { stream: true });
+    }
+
+    expect(buffer).toContain('event: bye');
     await waitFor(() => listenerCount(workspaceId) === 0);
+
+    controller.abort();
   });
 });

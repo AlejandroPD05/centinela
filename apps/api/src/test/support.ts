@@ -19,6 +19,8 @@ export async function canReachDatabase(url: string): Promise<boolean> {
 
 export interface EphemeralDatabase {
   db: Database;
+  /** URL de la base efímera (para conexiones sueltas, p. ej. LISTEN). */
+  url: string;
   drop(): Promise<void>;
 }
 
@@ -44,6 +46,7 @@ export async function createEphemeralDatabase(
 
   return {
     db,
+    url: testUrl.toString(),
     async drop() {
       await pool.end().catch(() => {});
       await admin.query(`drop database if exists ${name} with (force)`).catch(() => {});
