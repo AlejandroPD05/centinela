@@ -1,7 +1,7 @@
 import type { FastifyBaseLogger } from 'fastify';
 import type { Database } from '../db/client.js';
-import { claimDueMonitors } from './claim.js';
-import { processMonitor } from './process.js';
+import { claimDueMonitors, claimMonitorsForSslCheck } from './claim.js';
+import { processMonitor, processSslCheck } from './process.js';
 
 export interface WorkerConfig {
   /** Sonda entre ciclos cuando no hay trabajo (ms). */
@@ -11,6 +11,8 @@ export interface WorkerConfig {
   /** Checks que se ejecutan en paralelo. */
   concurrency: number;
   allowPrivateTargets: boolean;
+  /** Cada cuántas horas se revisa el certificado TLS de los monitores https. */
+  sslRecheckHours: number;
 }
 
 export interface WorkerDeps {
@@ -26,8 +28,16 @@ export interface WorkerHandle {
   stop(): Promise<void>;
 }
 
-/** Ejecuta un ciclo completo del worker y devuelve cuántos monitores procesó. */
+const SSL_BATCH_SIZE = 5;
+
+/** Ejecuta un ciclo completo del worker y devuelve cuántos checks procesó. */
 export async function runWorkerOnce(deps: WorkerDeps): Promise<number> {
+  const processed = await runCheckBatch(deps);
+  await runSslBatch(deps);
+  return processed;
+}
+
+async function runCheckBatch(deps: WorkerDeps): Promise<number> {
   const claimed = await claimDueMonitors(deps.db, deps.config.batchSize);
   if (claimed.length === 0) return 0;
 
@@ -46,8 +56,28 @@ export async function runWorkerOnce(deps: WorkerDeps): Promise<number> {
     }
   });
 
-  deps.log.debug({ claimed: claimed.length }, 'ciclo del worker completado');
+  deps.log.debug({ claimed: claimed.length }, 'ciclo de checks completado');
   return claimed.length;
+}
+
+async function runSslBatch(deps: WorkerDeps): Promise<void> {
+  const claimed = await claimMonitorsForSslCheck(
+    deps.db,
+    SSL_BATCH_SIZE,
+    deps.config.sslRecheckHours,
+  );
+  if (claimed.length === 0) return;
+
+  await mapWithConcurrency(claimed, deps.config.concurrency, async (monitor) => {
+    try {
+      await processSslCheck(
+        { db: deps.db, log: deps.log, allowPrivateTargets: deps.config.allowPrivateTargets },
+        monitor,
+      );
+    } catch (error) {
+      deps.log.error({ err: error, monitorId: monitor.id }, 'fallo al sondear el certificado TLS');
+    }
+  });
 }
 
 /**

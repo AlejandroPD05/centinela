@@ -4,6 +4,21 @@ export interface CheckLike {
   status: CheckStatus;
 }
 
+/** Ventanas de uptime que ofrece la API y pinta la interfaz. */
+export const uptimeWindows = ['24h', '7d', '30d', '90d'] as const;
+export type UptimeWindow = (typeof uptimeWindows)[number];
+
+const UPTIME_WINDOW_HOURS: Record<UptimeWindow, number> = {
+  '24h': 24,
+  '7d': 24 * 7,
+  '30d': 24 * 30,
+  '90d': 24 * 90,
+};
+
+export function uptimeWindowHours(window: UptimeWindow): number {
+  return UPTIME_WINDOW_HOURS[window];
+}
+
 /** Un check cuenta como servicio disponible si está arriba o degradado. */
 export function isAvailable(status: CheckStatus): boolean {
   return status === 'up' || status === 'degraded';

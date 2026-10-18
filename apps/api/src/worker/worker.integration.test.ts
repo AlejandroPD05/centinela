@@ -1,21 +1,25 @@
 import { randomUUID } from 'node:crypto';
-import { createServer, type Server } from 'node:http';
-import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { createServer as createHttpServer, type Server as HttpServer } from 'node:http';
+import type { Socket } from 'node:net';
+import { createServer as createTlsServer, type Server as TlsServer } from 'node:tls';
 import { asc, eq, sql } from 'drizzle-orm';
-import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import type { FastifyBaseLogger } from 'fastify';
-import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadEnvFileIfPresent } from '../config/env.js';
-import { createDatabase, type Database } from '../db/client.js';
-import { checkResults, monitors, workspaces } from '../db/schema.js';
+import { checkResults, incidentEvents, incidents, monitors, workspaces } from '../db/schema.js';
+import {
+  canReachDatabase,
+  createEphemeralDatabase,
+  type EphemeralDatabase,
+} from '../test/support.js';
 import { runWorkerOnce } from './worker.js';
 
 loadEnvFileIfPresent();
 
-const TEST_DB_NAME = 'centinela_test';
 const databaseUrl = process.env.DATABASE_URL ?? '';
-const migrationsFolder = fileURLToPath(new URL('../../drizzle', import.meta.url));
+const tlsKey = readFileSync(new URL('../checks/__fixtures__/tls-key.pem', import.meta.url));
+const tlsCert = readFileSync(new URL('../checks/__fixtures__/tls-cert.pem', import.meta.url));
 
 /** Logger mudo: los tests no ensucian la salida. */
 const silentLog = {
@@ -25,19 +29,6 @@ const silentLog = {
   error: () => {},
 } as unknown as FastifyBaseLogger;
 
-async function canReachDatabase(url: string): Promise<boolean> {
-  const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 2000 });
-  try {
-    await client.connect();
-    await client.query('select 1');
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await client.end().catch(() => {});
-  }
-}
-
 const dbAvailable = databaseUrl !== '' && (await canReachDatabase(databaseUrl));
 
 if (!dbAvailable) {
@@ -45,44 +36,50 @@ if (!dbAvailable) {
 }
 
 /**
- * Integración real: base de datos propia y efímera (`centinela_test`), el
- * esquema aplicado con migraciones y un servidor HTTP local como vigilado.
+ * Integración real: base de datos efímera con migraciones, un servidor HTTP
+ * local como servicio vigilado, un servidor TLS para comprobar el sondeo de
+ * certificados y un puerto cerrado para simular caídas.
  */
 describe.runIf(dbAvailable)('worker — integración con PostgreSQL', () => {
-  let admin: pg.Pool;
-  let pool: pg.Pool;
-  let db: Database;
-  let server: Server;
-  let closedPort: number;
+  let ephemeral: EphemeralDatabase;
+  let httpServer: HttpServer;
+  let tlsServer: TlsServer;
+  const tlsSockets = new Set<Socket>();
+  let httpPort = 0;
+  let closedPort = 0;
   let monitorId: string;
+  let httpsMonitorId: string;
 
   beforeAll(async () => {
-    admin = new pg.Pool({ connectionString: databaseUrl, max: 1 });
-    await admin.query(`drop database if exists ${TEST_DB_NAME} with (force)`);
-    await admin.query(`create database ${TEST_DB_NAME}`);
+    ephemeral = await createEphemeralDatabase(databaseUrl, 'centinela_test_worker');
 
-    const testUrl = new URL(databaseUrl);
-    testUrl.pathname = `/${TEST_DB_NAME}`;
-    const created = createDatabase(testUrl.toString());
-    pool = created.pool;
-    db = created.db;
-    await migrate(db, { migrationsFolder });
-
-    // Servidor que hará de "servicio vigilado".
-    server = createServer((_request, response) => {
+    // Servicio vigilado (HTTP).
+    httpServer = createHttpServer((_request, response) => {
       response.writeHead(200, { 'content-type': 'text/plain' });
       response.end('centinela ok');
     });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    const address = server.address();
-    const openPort = typeof address === 'object' && address ? address.port : 0;
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
+    const httpAddress = httpServer.address();
+    httpPort = typeof httpAddress === 'object' && httpAddress ? httpAddress.port : 0;
 
-    // Y un puerto cerrado para simular una caída.
-    const probe = createServer();
+    // Servicio con TLS autofirmado (para el sondeo del certificado).
+    tlsServer = createTlsServer({ key: tlsKey, cert: tlsCert }, (socket) => socket.end());
+    tlsServer.on('connection', (socket) => {
+      tlsSockets.add(socket);
+      socket.on('close', () => tlsSockets.delete(socket));
+    });
+    await new Promise<void>((resolve) => tlsServer.listen(0, '127.0.0.1', resolve));
+    const tlsAddress = tlsServer.address();
+    const tlsPort = typeof tlsAddress === 'object' && tlsAddress ? tlsAddress.port : 0;
+
+    // Puerto que se cierra al momento: nadie escucha en él.
+    const probe = createHttpServer();
     await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
     const probeAddress = probe.address();
     closedPort = typeof probeAddress === 'object' && probeAddress ? probeAddress.port : 0;
     await new Promise<void>((resolve) => probe.close(() => resolve()));
+
+    const { db } = ephemeral;
 
     const [workspace] = await db
       .insert(workspaces)
@@ -97,7 +94,7 @@ describe.runIf(dbAvailable)('worker — integración con PostgreSQL', () => {
         name: 'Servicio de prueba',
         slug: 'servicio-de-prueba',
         type: 'http',
-        url: `http://127.0.0.1:${openPort}/`,
+        url: `http://127.0.0.1:${httpPort}/`,
         intervalSeconds: 60,
         confirmFailures: 1,
         confirmRecoveries: 1,
@@ -105,30 +102,59 @@ describe.runIf(dbAvailable)('worker — integración con PostgreSQL', () => {
       .returning();
     if (!monitor) throw new Error('no se pudo crear el monitor');
     monitorId = monitor.id;
+
+    // Monitor https que no se chequea aún (programado a una hora vista) pero
+    // sí toca sondear su certificado: el worker lo hace en el lote SSL.
+    const [httpsMonitor] = await db
+      .insert(monitors)
+      .values({
+        workspaceId: workspace.id,
+        name: 'Servicio con TLS',
+        slug: 'servicio-tls',
+        type: 'http',
+        url: `https://127.0.0.1:${tlsPort}/`,
+        intervalSeconds: 3600,
+        nextCheckAt: sql`now() + interval '1 hour'`,
+        confirmFailures: 99,
+        confirmRecoveries: 1,
+      })
+      .returning();
+    if (!httpsMonitor) throw new Error('no se pudo crear el monitor https');
+    httpsMonitorId = httpsMonitor.id;
   });
 
   afterAll(async () => {
-    await pool?.end().catch(() => {});
-    await admin?.query(`drop database if exists ${TEST_DB_NAME} with (force)`).catch(() => {});
-    await admin?.end().catch(() => {});
-    if (server) {
-      server.closeAllConnections();
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+    await ephemeral?.drop();
+
+    for (const socket of tlsSockets) socket.destroy();
+
+    if (httpServer) {
+      httpServer.closeAllConnections();
+      await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+    }
+    if (tlsServer) {
+      await new Promise<void>((resolve) => tlsServer.close(() => resolve()));
     }
   });
 
   const deps = () => ({
-    db,
+    db: ephemeral.db,
     log: silentLog,
-    config: { tickMs: 500, batchSize: 10, concurrency: 3, allowPrivateTargets: true },
+    config: {
+      tickMs: 500,
+      batchSize: 10,
+      concurrency: 3,
+      allowPrivateTargets: true,
+      sslRecheckHours: 24,
+    },
   });
 
-  it('reclama el monitor vencido, lo chequea y programa el siguiente', async () => {
+  it('reclama el monitor vencido, lo chequea, programa el siguiente y sondea el TLS', async () => {
     const processed = await runWorkerOnce(deps());
 
     expect(processed).toBe(1);
 
-    const [monitor] = await db.select().from(monitors).where(eq(monitors.id, monitorId));
+    const [monitor] = await ephemeral.db.select().from(monitors).where(eq(monitors.id, monitorId));
     expect(monitor?.state).toBe('up');
     expect(monitor?.lastCheckAt).not.toBeNull();
     expect(monitor?.lastStateChangeAt).not.toBeNull();
@@ -139,7 +165,7 @@ describe.runIf(dbAvailable)('worker — integración con PostgreSQL', () => {
     expect(secondsAhead).toBeGreaterThan(45);
     expect(secondsAhead).toBeLessThan(75);
 
-    const results = await db
+    const results = await ephemeral.db
       .select()
       .from(checkResults)
       .where(eq(checkResults.monitorId, monitorId))
@@ -148,16 +174,40 @@ describe.runIf(dbAvailable)('worker — integración con PostgreSQL', () => {
     expect(results).toHaveLength(1);
     expect(results[0]?.status).toBe('up');
     expect(results[0]?.statusCode).toBe(200);
+
+    // El monitor https no se chequeó (no le toca) pero su certificado sí se leyó.
+    const [httpsMonitor] = await ephemeral.db
+      .select()
+      .from(monitors)
+      .where(eq(monitors.id, httpsMonitorId));
+    expect(httpsMonitor?.state).toBe('pending');
+    expect(httpsMonitor?.sslCheckedAt).not.toBeNull();
+    expect(httpsMonitor?.sslExpiresAt).not.toBeNull();
+    expect(httpsMonitor?.sslIssuer).toContain('centinela-test');
+
+    const daysToExpiry = (httpsMonitor!.sslExpiresAt!.getTime() - Date.now()) / 86_400_000;
+    expect(daysToExpiry).toBeGreaterThan(3600);
   });
 
-  it('no vuelve a reclamar un monitor ya programado', async () => {
+  it('no vuelve a reclamar nada ya programado ni revisa otra vez el TLS', async () => {
+    const before = await ephemeral.db
+      .select({ checkedAt: monitors.sslCheckedAt })
+      .from(monitors)
+      .where(eq(monitors.id, httpsMonitorId));
+
     const processed = await runWorkerOnce(deps());
 
     expect(processed).toBe(0);
+
+    const after = await ephemeral.db
+      .select({ checkedAt: monitors.sslCheckedAt })
+      .from(monitors)
+      .where(eq(monitors.id, httpsMonitorId));
+    expect(after[0]?.checkedAt?.getTime()).toBe(before[0]?.checkedAt?.getTime());
   });
 
-  it('un fallo confirmado cambia el estado a down y queda registrado', async () => {
-    await db
+  it('al confirmar la caída abre una incidencia con su evento de apertura', async () => {
+    await ephemeral.db
       .update(monitors)
       .set({ url: `http://127.0.0.1:${closedPort}/`, nextCheckAt: sql`now()` })
       .where(eq(monitors.id, monitorId));
@@ -166,23 +216,35 @@ describe.runIf(dbAvailable)('worker — integración con PostgreSQL', () => {
 
     expect(processed).toBe(1);
 
-    const [monitor] = await db.select().from(monitors).where(eq(monitors.id, monitorId));
+    const [monitor] = await ephemeral.db.select().from(monitors).where(eq(monitors.id, monitorId));
     expect(monitor?.state).toBe('down');
     expect(monitor?.consecutiveFailures).toBe(1);
 
-    const results = await db
+    const results = await ephemeral.db
       .select()
       .from(checkResults)
       .where(eq(checkResults.monitorId, monitorId))
       .orderBy(asc(checkResults.id));
-
     const last = results.at(-1);
     expect(last?.status).toBe('down');
     expect(last?.error).toContain('rechazada');
+
+    const [incident] = await ephemeral.db
+      .select()
+      .from(incidents)
+      .where(eq(incidents.monitorId, monitorId));
+    expect(incident?.resolvedAt).toBeNull();
+    expect(incident?.cause).toContain('rechazada');
+
+    const events = await ephemeral.db
+      .select()
+      .from(incidentEvents)
+      .where(eq(incidentEvents.incidentId, incident!.id));
+    expect(events.map((event) => event.kind)).toEqual(['opened']);
   });
 
   it('un monitor pausado no se reclama', async () => {
-    await db
+    await ephemeral.db
       .update(monitors)
       .set({ paused: true, nextCheckAt: sql`now()` })
       .where(eq(monitors.id, monitorId));
@@ -190,5 +252,32 @@ describe.runIf(dbAvailable)('worker — integración con PostgreSQL', () => {
     const processed = await runWorkerOnce(deps());
 
     expect(processed).toBe(0);
+  });
+
+  it('al recuperar cierra la incidencia y deja el evento de recuperación', async () => {
+    await ephemeral.db
+      .update(monitors)
+      .set({ paused: false, url: `http://127.0.0.1:${httpPort}/`, nextCheckAt: sql`now()` })
+      .where(eq(monitors.id, monitorId));
+
+    const processed = await runWorkerOnce(deps());
+
+    expect(processed).toBe(1);
+
+    const [monitor] = await ephemeral.db.select().from(monitors).where(eq(monitors.id, monitorId));
+    expect(monitor?.state).toBe('up');
+
+    const [incident] = await ephemeral.db
+      .select()
+      .from(incidents)
+      .where(eq(incidents.monitorId, monitorId));
+    expect(incident?.resolvedAt).not.toBeNull();
+
+    const events = await ephemeral.db
+      .select()
+      .from(incidentEvents)
+      .where(eq(incidentEvents.incidentId, incident!.id))
+      .orderBy(asc(incidentEvents.id));
+    expect(events.map((event) => event.kind)).toEqual(['opened', 'recovered']);
   });
 });

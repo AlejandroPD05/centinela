@@ -15,6 +15,13 @@
       "when": 1792314898791,
       "tag": "0001_yellow_colossus",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792325204017,
+      "tag": "0002_medical_goliath",
+      "breakpoints": true
     }
   ]
 }

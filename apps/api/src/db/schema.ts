@@ -28,6 +28,12 @@ export const monitorTypeEnum = pgEnum('monitor_type', ['http', 'tcp', 'heartbeat
 export const httpMethodEnum = pgEnum('http_method', ['GET', 'HEAD']);
 export const checkStatusEnum = pgEnum('check_status', ['up', 'degraded', 'down', 'error']);
 export const monitorStateEnum = pgEnum('monitor_state', ['pending', 'up', 'degraded', 'down']);
+export const incidentEventKindEnum = pgEnum('incident_event_kind', [
+  'opened',
+  'recovered',
+  'notified',
+  'comment',
+]);
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 
@@ -112,6 +118,13 @@ export const monitors = pgTable(
     consecutiveFailures: integer('consecutive_failures').notNull().default(0),
     consecutiveSuccesses: integer('consecutive_successes').notNull().default(0),
 
+    // Certificado TLS (solo monitores HTTP https; se sondea cada SSL_RECHECK_HOURS)
+    // Certificado TLS (solo monitores HTTP https; se sondea cada SSL_RECHECK_HOURS)
+    sslExpiresAt: timestamp('ssl_expires_at', { withTimezone: true }),
+    sslCheckedAt: timestamp('ssl_checked_at', { withTimezone: true }),
+    sslIssuer: text('ssl_issuer'),
+    sslError: text('ssl_error'),
+
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
@@ -144,4 +157,42 @@ export const checkResults = pgTable(
     checkedAt: timestamp('checked_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index('check_results_monitor_time_idx').on(table.monitorId, table.checkedAt)],
+);
+
+/** Caída confirmada de un monitor, desde que se declara hasta que recupera. */
+export const incidents = pgTable(
+  'incidents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    monitorId: uuid('monitor_id')
+      .notNull()
+      .references(() => monitors.id, { onDelete: 'cascade' }),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    /** Motivo del primer fallo confirmado. */
+    cause: text('cause'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('incidents_monitor_started_idx').on(table.monitorId, table.startedAt.desc()),
+    /** Invariante: como mucho un incidente abierto por monitor. */
+    uniqueIndex('incidents_open_per_monitor_key')
+      .on(table.monitorId)
+      .where(sql`resolved_at is null`),
+  ],
+);
+
+/** Timeline de una incidencia: apertura, recuperación, avisos enviados, notas. */
+export const incidentEvents = pgTable(
+  'incident_events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    incidentId: uuid('incident_id')
+      .notNull()
+      .references(() => incidents.id, { onDelete: 'cascade' }),
+    kind: incidentEventKindEnum('kind').notNull(),
+    detail: text('detail'),
+    happenedAt: timestamp('happened_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('incident_events_incident_idx').on(table.incidentId, table.happenedAt)],
 );

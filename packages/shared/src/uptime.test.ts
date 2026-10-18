@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { availability, formatAvailability, isAvailable, percentile } from './uptime.js';
+import {
+  availability,
+  formatAvailability,
+  isAvailable,
+  percentile,
+  uptimeWindowHours,
+} from './uptime.js';
+
+describe('uptimeWindowHours', () => {
+  it('traduce cada ventana a sus horas', () => {
+    expect(uptimeWindowHours('24h')).toBe(24);
+    expect(uptimeWindowHours('7d')).toBe(168);
+    expect(uptimeWindowHours('30d')).toBe(720);
+    expect(uptimeWindowHours('90d')).toBe(2160);
+  });
+});
 
 describe('isAvailable', () => {
   it('considera disponibles los servicios arriba y degradados', () => {

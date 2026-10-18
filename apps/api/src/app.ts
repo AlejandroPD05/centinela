@@ -4,6 +4,7 @@ import type { Env } from './config/env.js';
 import type { Database } from './db/client.js';
 import { loggerOptions } from './logger.js';
 import { healthRoutes } from './routes/health.js';
+import { monitorRoutes } from './routes/monitors.js';
 
 export interface BuildServerOptions {
   env: Env;
@@ -32,6 +33,7 @@ export function buildServer({ env, database }: BuildServerOptions): FastifyInsta
       }));
 
       healthRoutes(api, database);
+      if (database) monitorRoutes(api, database);
     },
     { prefix: '/api' },
   );

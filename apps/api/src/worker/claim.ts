@@ -35,3 +35,35 @@ export async function claimDueMonitors(db: Database, limit: number): Promise<Mon
     .where(inArray(monitors.id, due))
     .returning();
 }
+
+/**
+ * Reclama los monitores https cuyo certificado toca revisar (cada
+ * `recheckHours`). Marca `ssl_checked_at` al reclamar: si el sondeo falla, se
+ * reintentará en el siguiente ciclo de revisión.
+ */
+export async function claimMonitorsForSslCheck(
+  db: Database,
+  limit: number,
+  recheckHours: number,
+): Promise<MonitorRow[]> {
+  const due = db
+    .select({ id: monitors.id })
+    .from(monitors)
+    .where(
+      and(
+        eq(monitors.paused, false),
+        eq(monitors.type, 'http'),
+        sql`${monitors.url} like 'https://%'`,
+        sql`(${monitors.sslCheckedAt} is null or ${monitors.sslCheckedAt} < now() - make_interval(hours => ${recheckHours}))`,
+      ),
+    )
+    .orderBy(sql`${monitors.sslCheckedAt} asc nulls first`)
+    .limit(limit)
+    .for('update', { skipLocked: true });
+
+  return db
+    .update(monitors)
+    .set({ sslCheckedAt: sql`now()` })
+    .where(inArray(monitors.id, due))
+    .returning();
+}

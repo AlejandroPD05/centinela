@@ -18,6 +18,7 @@ const worker = env.WORKER_ENABLED
         batchSize: env.WORKER_BATCH_SIZE,
         concurrency: env.WORKER_CONCURRENCY,
         allowPrivateTargets: env.ALLOW_PRIVATE_TARGETS,
+        sslRecheckHours: env.SSL_RECHECK_HOURS,
       },
     })
   : null;

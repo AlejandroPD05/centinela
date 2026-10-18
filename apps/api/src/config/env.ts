@@ -34,6 +34,9 @@ const envSchema = z.object({
 
   // Guarda SSRF: desactivable solo para desarrollo local y tests.
   ALLOW_PRIVATE_TARGETS: booleanish(false),
+
+  // Revisión del certificado TLS de los monitores https.
+  SSL_RECHECK_HOURS: z.coerce.number().int().min(1).max(720).default(24),
 });
 
 export type Env = z.infer<typeof envSchema>;
