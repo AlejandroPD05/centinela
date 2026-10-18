@@ -6,6 +6,39 @@
    Reglas duras: color = estado; sin radius, sombras ni glass.
    ============================================================= */
 
+/* Fuentes propias, servidas por la API (mismo origen; cero terceros). */
+@font-face {
+  font-family: 'Archivo';
+  src: url('/assets/fonts/archivo-400-latin.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Archivo Black';
+  src: url('/assets/fonts/archivo-black-latin.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('/assets/fonts/ibm-plex-mono-400-latin.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('/assets/fonts/ibm-plex-mono-500-latin.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
   --color-ground: #0b0c0e;
   --color-panel: #121417;
@@ -13,6 +46,7 @@
   --color-ink-dim: #9a9c99;
   --color-line: #26282c;
   --color-hazard: #e61919;
+  --color-hazard-ink: #f53b2f;
   --color-lamp-up: #46c46a;
   --color-lamp-warn: #e0a32e;
   --color-lamp-down: #e61919;

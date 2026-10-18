@@ -74,9 +74,7 @@ export function incidentRoutes(
           resolvedAt: row.resolvedAt?.toISOString() ?? null,
           durationSeconds: Math.max(
             0,
-            Math.floor(
-              ((row.resolvedAt?.getTime() ?? now) - row.startedAt.getTime()) / 1000,
-            ),
+            Math.floor(((row.resolvedAt?.getTime() ?? now) - row.startedAt.getTime()) / 1000),
           ),
           cause: row.cause,
           open: row.resolvedAt === null,

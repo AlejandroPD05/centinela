@@ -172,10 +172,33 @@ describe.runIf(dbAvailable)('consola — ampliaciones de API en integración', (
 
     // Cuatro checks: el más nuevo y el más viejo correctos.
     await db.insert(checkResults).values([
-      { monitorId, status: 'up', latencyMs: 120, statusCode: 200, checkedAt: new Date(now - 30 * MINUTE) },
-      { monitorId, status: 'degraded', latencyMs: 800, statusCode: 200, checkedAt: new Date(now - 20 * MINUTE) },
-      { monitorId, status: 'down', error: 'conexión rechazada', checkedAt: new Date(now - 10 * MINUTE) },
-      { monitorId, status: 'up', latencyMs: 150, statusCode: 200, checkedAt: new Date(now - 5 * MINUTE) },
+      {
+        monitorId,
+        status: 'up',
+        latencyMs: 120,
+        statusCode: 200,
+        checkedAt: new Date(now - 30 * MINUTE),
+      },
+      {
+        monitorId,
+        status: 'degraded',
+        latencyMs: 800,
+        statusCode: 200,
+        checkedAt: new Date(now - 20 * MINUTE),
+      },
+      {
+        monitorId,
+        status: 'down',
+        error: 'conexión rechazada',
+        checkedAt: new Date(now - 10 * MINUTE),
+      },
+      {
+        monitorId,
+        status: 'up',
+        latencyMs: 150,
+        statusCode: 200,
+        checkedAt: new Date(now - 5 * MINUTE),
+      },
     ]);
 
     // Una incidencia abierta en el espacio propio y una resuelta con timeline.
@@ -413,12 +436,20 @@ describe.runIf(dbAvailable)('consola — ampliaciones de API en integración', (
       }>;
     };
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toMatchObject({ monitorName: 'API de ejemplo', open: true, cause: 'conexión rechazada' });
+    expect(rows[0]).toMatchObject({
+      monitorName: 'API de ejemplo',
+      open: true,
+      cause: 'conexión rechazada',
+    });
     expect(rows[0]?.durationSeconds).toBeGreaterThan(0);
     expect(rows[1]).toMatchObject({ open: false, cause: 'tiempo agotado' });
     expect(rows[0]).not.toHaveProperty('events');
 
-    const own = await app.inject({ method: 'GET', url: '/api/incidents', headers: strangerHeaders });
+    const own = await app.inject({
+      method: 'GET',
+      url: '/api/incidents',
+      headers: strangerHeaders,
+    });
     const ownRows = (own.json() as { incidents: Array<{ cause: string | null }> }).incidents;
     expect(ownRows).toHaveLength(1);
     expect(ownRows[0]?.cause).toBe('némesis del test');
@@ -440,7 +471,12 @@ describe.runIf(dbAvailable)('consola — ampliaciones de API en integración', (
     expect(response.statusCode).toBe(200);
 
     const { deliveries: rows } = response.json() as {
-      deliveries: Array<{ channelName: string; monitorName: string; status: string; lastError: string | null }>;
+      deliveries: Array<{
+        channelName: string;
+        monitorName: string;
+        status: string;
+        lastError: string | null;
+      }>;
     };
     expect(rows).toHaveLength(2);
     expect(rows.every((row) => row.channelName === 'Webhook de consola')).toBe(true);
@@ -451,7 +487,8 @@ describe.runIf(dbAvailable)('consola — ampliaciones de API en integración', (
       url: `/api/deliveries?workspaceId=${workspaceId}&status=failed`,
       headers: viewerHeaders,
     });
-    const failedRows = (failed.json() as { deliveries: Array<{ lastError: string | null }> }).deliveries;
+    const failedRows = (failed.json() as { deliveries: Array<{ lastError: string | null }> })
+      .deliveries;
     expect(failedRows).toHaveLength(1);
     expect(failedRows[0]?.lastError).toBe('el webhook respondió 500');
 

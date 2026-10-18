@@ -48,21 +48,21 @@ lámparas de torre: verde fijo (arriba), ámbar intermitente (degradado), rojo f
 
 ## Tokens v1
 
-| Token               | Valor         | Uso                                          |
-| ------------------- | ------------- | -------------------------------------------- |
-| `--color-ground`    | `#0b0c0e`     | Sustrato tipo CRT apagado (nunca negro puro) |
-| `--color-panel`     | `#121417`     | Superficie de paneles y celdas               |
-| `--color-ink`       | `#e6e6e2`     | Texto principal (blanco fósforo)             |
-| `--color-ink-dim`   | `#9a9c99`     | Metadatos y texto secundario                 |
-| `--color-line`      | `#26282c`     | Líneas estructurales de 1 px                 |
-| `--color-hazard`    | `#e61919`     | Rojo de señal: marca y alertas               |
-| `--color-hazard-ink`| `#f53b2f`     | Rojo de señal legible en texto pequeño (AA)  |
-| `--color-lamp-up`   | `#46c46a`     | Lámpara: servicio arriba                     |
-| `--color-lamp-warn` | `#e0a32e`     | Lámpara: degradado                           |
-| `--color-lamp-down` | `#e61919`     | Lámpara: caído                               |
-| `--font-display`    | Archivo Black | Titulares y cifras grandes                   |
-| `--font-body`       | Archivo       | Texto corrido                                |
-| `--font-data`       | IBM Plex Mono | Datos, etiquetas, series                     |
+| Token                | Valor         | Uso                                          |
+| -------------------- | ------------- | -------------------------------------------- |
+| `--color-ground`     | `#0b0c0e`     | Sustrato tipo CRT apagado (nunca negro puro) |
+| `--color-panel`      | `#121417`     | Superficie de paneles y celdas               |
+| `--color-ink`        | `#e6e6e2`     | Texto principal (blanco fósforo)             |
+| `--color-ink-dim`    | `#9a9c99`     | Metadatos y texto secundario                 |
+| `--color-line`       | `#26282c`     | Líneas estructurales de 1 px                 |
+| `--color-hazard`     | `#e61919`     | Rojo de señal: marca y alertas               |
+| `--color-hazard-ink` | `#f53b2f`     | Rojo de señal legible en texto pequeño (AA)  |
+| `--color-lamp-up`    | `#46c46a`     | Lámpara: servicio arriba                     |
+| `--color-lamp-warn`  | `#e0a32e`     | Lámpara: degradado                           |
+| `--color-lamp-down`  | `#e61919`     | Lámpara: caído                               |
+| `--font-display`     | Archivo Black | Titulares y cifras grandes                   |
+| `--font-body`        | Archivo       | Texto corrido                                |
+| `--font-data`        | IBM Plex Mono | Datos, etiquetas, series                     |
 
 ## Superficies
 
@@ -114,3 +114,25 @@ Para repetirlo (con la API en marcha):
 node <skill>/scripts/lint.mjs apps/api/src/public apps/api/src/routes/status.ts
 node <skill>/scripts/inspect.mjs http://127.0.0.1:4100/status/<slug> --out <tmp> --allow mono,hairline,micro-label,few-pictures,no-real-pictures,no-footage,still-page
 ```
+
+## Control de calidad de la consola (M6)
+
+La consola no pasa el gate de la skill (la propia tabla de método lo limita a la
+página pública), pero sí un pase visual y funcional propio sobre la app viva,
+con datos de demo y Chrome headless a 1440 y 390:
+
+- **Recorrido visual** (14 capturas): acceso, panel, detalle de monitor (HTTP y
+  latido), formularios, canales, incidencias, entregas y las tres pestañas del
+  espacio, más las vistas móviles. Cero errores de consola, sin overlays de
+  error.
+- **Recorrido funcional**: pausar y reanudar desde el panel; guardar un
+  formulario en vacío (los errores se pintan bajo su campo, con los mensajes de
+  zod traducidos); crear un monitor real y borrarlo con la confirmación en dos
+  pasos; crear un canal, probarlo —la entrega falló como debía y quedó contada
+  tal cual— y borrarlo.
+- La consola reutiliza tokens y dispositivos de la status page (lámpara, cinta,
+  retícula); el color sigue reservado al estado, también en las acciones.
+
+Para repetirlo (con API y panel en marcha): `node panel-shots.mjs` y
+`node panel-interact.mjs`, guiones de CDP locales que dependen de la skill
+`design-taste-frontend` de la máquina de desarrollo y no viven en el repo.

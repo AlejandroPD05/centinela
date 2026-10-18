@@ -4,10 +4,10 @@ Monitorización de estado para proyectos propios: disponibilidad, latencia,
 certificados SSL y heartbeats, con una status page pública que vigila los
 despliegues de este portfolio.
 
-> **Estado: M5 — Status page.** La cara pública ya existe: status page servida
-> por la API sin framework (SSE opcional y sin cookies), badges SVG con ETag y
-> widget embebible, con el gate de diseño `design-taste-frontend` pasado sobre
-> la página viva. Hoja de ruta completa [aquí](#hoja-de-ruta).
+> **Estado: M6 — Panel de operador.** La consola ya está: dashboard en vivo,
+> detalle de monitor con cinta y percentiles, editores, canales con prueba de
+> entrega, incidencias, registro de entregas y gestión del espacio (miembros,
+> claves y auditoría). Hoja de ruta completa [aquí](#hoja-de-ruta).
 
 ## Cómo funciona
 
@@ -66,6 +66,12 @@ públicos. Los **badges SVG** (`/badge/:slug/:monitor.svg`) van con `ETag` y
 caché de un minuto para el README, y el **widget** (`/embed/:slug`) es la misma
 página en modo compacto para incrustar en otra web.
 
+El **panel de operador** (React + Vite) es la otra cara: lee los mismos datos
+con TanStack Query en ciclos cortos (10–30 s; sin SSE en la consola), pinta la
+cinta y la latencia con SVG propio y concentra las acciones —pausar, comprobar
+a demanda, editar, probar un canal— sin recargar la página. El panel no
+condiciona la vigilancia: los checks y los avisos siguen aunque nadie mire.
+
 ## Stack
 
 | Capa         | Elección                                        |
@@ -107,7 +113,8 @@ pnpm dev
 
 - API: <http://127.0.0.1:4100/api/health>
 - Documentación: <http://127.0.0.1:4100/api/docs>
-- Panel: <http://127.0.0.1:4101> (hace proxy de `/api` hacia la API)
+- Panel: <http://127.0.0.1:4101> (hace proxy de `/api`, `/status`, `/badge`,
+  `/embed` y las fuentes hacia la API)
 
 El comando `api:cli create-user` crea el usuario y, si el espacio no existe, lo
 crea y te deja como `admin`. Entra con `POST /api/auth/login` o desde el panel.
@@ -162,7 +169,7 @@ dirección completa (reglas duras, tokens y presupuesto de rendimiento) está en
 - [x] **M3 — Notificaciones y heartbeats:** Discord, webhook y email; latidos de entrada; reintentos con backoff y registro de entregas
 - [x] **M4 — API pública y accesos:** sesiones JWT con refresco rotatorio, roles por espacio, claves de API, OpenAPI servido por la API y auditoría
 - [x] **M5 — Status page:** pública con SSE, badges SVG y widget embebible
-- [ ] **M6 — Panel de operador:** dashboard en vivo, gráficas SVG propias, editores, accesibilidad AA
+- [x] **M6 — Panel de operador:** dashboard en vivo, gráficas SVG propias, editores, accesibilidad AA
 - [ ] **M7 — Endurecimiento:** dead-man switch, backups, límites y apagado ordenado
 - [ ] **M8 — E2E y despliegue:** Playwright con servidor víctima, seed real, Render + Neon
 - [ ] **M9 — Servidor MCP:** consultar estado e incidencias desde un asistente
