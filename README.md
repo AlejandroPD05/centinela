@@ -88,7 +88,9 @@ condiciona la vigilancia: los checks y los avisos siguen aunque nadie mire.
 centinela/
 ├─ apps/
 │  ├─ api/        API HTTP + worker (Fastify, Drizzle)
-│  └─ web/        Panel de operador (React + Vite)
+│  ├─ web/        Panel de operador (React + Vite)
+│  ├─ mcp/        Servidor MCP para asistentes (solo lectura)
+│  └─ e2e/        Pruebas de extremo a extremo (Playwright)
 ├─ packages/
 │  └─ shared/     Tipos, esquemas y lógica pura compartida
 ├─ docs/
@@ -163,6 +165,7 @@ Todas las variables viven en el `.env` de la raíz (ver [`.env.example`](.env.ex
 | `pnpm db:seed`              | Recrea la demo pública (espacio `demo`, 90 días de histórico)                     |
 | `pnpm e2e`                  | Pruebas de extremo a extremo (Playwright; antes, `pnpm e2e:install`)              |
 | `pnpm api:cli`              | Utilidades de operación (p. ej. `create-user`); requiere `pnpm build` previo      |
+| `pnpm mcp`                  | Arranca el servidor MCP en modo desarrollo (ver abajo)                            |
 
 ## Diseño
 
@@ -177,6 +180,37 @@ apagado ordenado y un runbook para las alertas están en
 [docs/OPERATIONS.md](docs/OPERATIONS.md). El despliegue en Render + Neon, paso a
 paso, vive en [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
+## Servidor MCP
+
+`apps/mcp` publica el estado y las incidencias como herramientas
+[MCP](https://modelcontextprotocol.io) para que un asistente (Claude, Cursor,
+cualquier cliente compatible) pueda preguntar «¿qué está caído?» sin abrir el
+panel. Es de solo lectura y se autentica con una clave de API.
+
+1. Crea una clave en el panel (**Espacio → Claves**) y compila: `pnpm build`.
+2. Apunta tu cliente MCP a `apps/mcp/dist/index.js`:
+
+```json
+{
+  "mcpServers": {
+    "centinela": {
+      "command": "node",
+      "args": ["C:\\ruta\\a\\Centinela\\apps\\mcp\\dist\\index.js"],
+      "env": {
+        "CENTINELA_URL": "https://status.tu-dominio.com",
+        "CENTINELA_API_KEY": "cnt_…"
+      }
+    }
+  }
+}
+```
+
+Herramientas disponibles: `estado_de_servicios` (resumen con semáforos,
+disponibilidad de 24 h y 7 días e incidencias abiertas), `detalle_de_monitor`
+(ficha completa con uptime de 90 días, percentiles de latencia y certificado) y
+`listar_incidencias` (causa y duración, con filtro de abiertas). Si solo vigilas
+un espacio, `CENTINELA_WORKSPACE` lo fija por defecto.
+
 ## Hoja de ruta
 
 - [x] **M0 — Base operativa:** monorepo, API con `/api/health`, esquema y migraciones, CI, primera pantalla
@@ -188,7 +222,7 @@ paso, vive en [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 - [x] **M6 — Panel de operador:** dashboard en vivo, gráficas SVG propias, editores, accesibilidad AA
 - [x] **M7 — Endurecimiento:** guarda SSRF en el socket, SSE multi-instancia por `LISTEN/NOTIFY`, límites por IP y por token, watchdog + dead-man switch, copias de seguridad y apagado ordenado ([manual de operación](docs/OPERATIONS.md))
 - [x] **M8 — E2E y despliegue:** pruebas de extremo a extremo con servidor víctima y CI, semilla reproducible (`db:seed`), panel servido por la API en producción y guía Render + Neon ([despliegue](docs/DEPLOYMENT.md))
-- [ ] **M9 — Servidor MCP:** consultar estado e incidencias desde un asistente
+- [x] **M9 — Servidor MCP:** estado e incidencias como herramientas para asistentes (`apps/mcp`, solo lectura y con clave de API)
 - [ ] **M10 — Ficha en el portfolio:** captura, tecnologías y demo
 
 ## Licencia

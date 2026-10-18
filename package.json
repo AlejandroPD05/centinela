@@ -24,7 +24,8 @@
     "db:studio": "pnpm --filter @centinela/api run db:studio",
     "db:backup": "node scripts/db-backup.mjs",
     "db:seed": "pnpm --filter @centinela/api run cli seed-demo",
-    "api:cli": "pnpm --filter @centinela/api run cli"
+    "api:cli": "pnpm --filter @centinela/api run cli",
+    "mcp": "pnpm --filter @centinela/mcp run dev"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

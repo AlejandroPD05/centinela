@@ -203,7 +203,7 @@ const SEED_MONITORS: SeedMonitor[] = [
     latencyFactor: 1,
   },
   {
-    name: 'Panel de automatización (n8n)',
+    name: 'Panel de automatización',
     slug: 'n8n',
     type: 'http',
     url: 'https://api.invalid',
