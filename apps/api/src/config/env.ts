@@ -41,6 +41,13 @@ const envSchema = z.object({
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(3_650).default(30),
   LOGIN_ATTEMPTS_PER_MINUTE: z.coerce.number().int().min(1).max(1_000).default(10),
 
+  // Límites de peticiones por IP y por minuto (0 desactiva el límite).
+  // El general cubre /api; el público protege status/badges/embed/fuentes.
+  RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(0).max(100_000).default(600),
+  PUBLIC_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(0).max(100_000).default(300),
+  /** Latidos por minuto y por token: un monitor no se deja inundar. */
+  HEARTBEAT_LIMIT_PER_MINUTE: z.coerce.number().int().min(0).max(10_000).default(120),
+
   // Revisión del certificado TLS de los monitores https.
   SSL_RECHECK_HOURS: z.coerce.number().int().min(1).max(720).default(24),
 

@@ -5,6 +5,7 @@ import type { Env } from './config/env.js';
 import type { Database } from './db/client.js';
 import { startStatusBridge } from './events/bridge.js';
 import { loggerOptions } from './logger.js';
+import { rateLimit } from './plugins/limits.js';
 import { apiKeyRoutes } from './routes/api-keys.js';
 import { auditRoutes } from './routes/audit.js';
 import { authRoutes } from './routes/auth.js';
@@ -61,6 +62,14 @@ export function buildServer({ env, database }: BuildServerOptions): FastifyInsta
 
   app.register(
     async (api) => {
+      // Límite general por IP para toda la API. En los tests va desactivado:
+      // las suites lanzan muchas peticiones seguidas a propósito.
+      rateLimit(api, {
+        perMinute: env.RATE_LIMIT_PER_MINUTE,
+        scope: 'api',
+        enabled: env.NODE_ENV !== 'test',
+      });
+
       api.get('/', async () => ({
         name: 'centinela',
         version: '0.1.0',
@@ -81,7 +90,7 @@ export function buildServer({ env, database }: BuildServerOptions): FastifyInsta
         auditRoutes(api, database, authenticate);
         monitorRoutes(api, database, authenticate);
         incidentRoutes(api, database, authenticate);
-        heartbeatRoutes(api, database);
+        heartbeatRoutes(api, database, { limitPerMinute: env.HEARTBEAT_LIMIT_PER_MINUTE });
         channelRoutes(api, database, env, authenticate);
         deliveryRoutes(api, database, authenticate);
       }
@@ -93,6 +102,11 @@ export function buildServer({ env, database }: BuildServerOptions): FastifyInsta
   if (database) {
     const db = database;
     app.register(async (publico) => {
+      rateLimit(publico, {
+        perMinute: env.PUBLIC_RATE_LIMIT_PER_MINUTE,
+        scope: 'publicas',
+        enabled: env.NODE_ENV !== 'test',
+      });
       statusRoutes(publico, db);
     });
   }

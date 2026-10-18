@@ -1,8 +1,14 @@
 import { and, eq } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { FixedWindowLimiter } from '../auth/limiter.js';
 import type { Database } from '../db/client.js';
 import { monitors } from '../db/schema.js';
 import { persistOutcome } from '../worker/persist.js';
+
+export interface HeartbeatOptions {
+  /** Latidos por minuto y por token; 0 desactiva el límite. */
+  limitPerMinute: number;
+}
 
 /**
  * Latidos de entrada: `POST/GET /api/heartbeats/:token`.
@@ -10,8 +16,19 @@ import { persistOutcome } from '../worker/persist.js';
  * Cada latido cuenta como un check correcto y reprograma el plazo
  * (periodo + gracia). El token solo identifica a un monitor: no revela nada
  * más del sistema. GET se mantiene para plataformas que solo saben hacer ping.
+ *
+ * Un latido escribe en la base (resultado + estado), así que cada token lleva
+ * su propio límite: un script descontrolado no puede inundar la serie; el
+ * límite general por IP cubre el resto.
  */
-export function heartbeatRoutes(app: FastifyInstance, database: Database): void {
+export function heartbeatRoutes(
+  app: FastifyInstance,
+  database: Database,
+  options: HeartbeatOptions,
+): void {
+  const limiter =
+    options.limitPerMinute > 0 ? new FixedWindowLimiter(options.limitPerMinute) : null;
+
   const handlePing = async (
     request: FastifyRequest<{ Params: { token: string } }>,
     reply: FastifyReply,
@@ -19,6 +36,16 @@ export function heartbeatRoutes(app: FastifyInstance, database: Database): void 
     const token = request.params.token ?? '';
     if (token.length < 8 || token.length > 128) {
       return reply.code(400).send({ error: 'token de latido inválido' });
+    }
+
+    if (limiter) {
+      const verdict = limiter.hit(token);
+      if (!verdict.allowed) {
+        return reply
+          .code(429)
+          .header('retry-after', String(verdict.retryAfterSeconds))
+          .send({ error: 'demasiados latidos para este monitor; baja el ritmo' });
+      }
     }
 
     const [monitor] = await database
