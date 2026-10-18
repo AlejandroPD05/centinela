@@ -1,4 +1,7 @@
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import helmet from '@fastify/helmet';
+import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { createAuthenticator } from './auth/plugin.js';
 import type { Env } from './config/env.js';
@@ -26,10 +29,20 @@ export interface BuildServerOptions {
   database?: Database;
   /** Señal de vida del motor de checks, para /api/health (opcional). */
   workerHealth?: () => WorkerHealth | null;
+  /** Raíz del panel compilado; `null` para no servirlo. Por defecto, en producción, apps/web/dist. */
+  webRoot?: string | null;
 }
 
+/** Panel compilado, vecino de la API en el monorepo (apps/web/dist). */
+const defaultWebRoot = fileURLToPath(new URL('../../web/dist', import.meta.url));
+
 /** Construye Fastify sin abrir el puerto: los tests usan `app.inject()`. */
-export function buildServer({ env, database, workerHealth }: BuildServerOptions): FastifyInstance {
+export function buildServer({
+  env,
+  database,
+  workerHealth,
+  webRoot = env.NODE_ENV === 'production' && existsSync(defaultWebRoot) ? defaultWebRoot : null,
+}: BuildServerOptions): FastifyInstance {
   const app = Fastify({
     logger: loggerOptions(env),
     trustProxy: true,
@@ -114,6 +127,30 @@ export function buildServer({ env, database, workerHealth }: BuildServerOptions)
         enabled: env.NODE_ENV !== 'test',
       });
       statusRoutes(publico, db);
+    });
+  }
+
+  // Panel compilado (producción): la API sirve apps/web/dist en la raíz, así
+  // que panel, status page y badges comparten origen. Cualquier GET que no
+  // toque la API ni las superficies públicas cae en index.html (SPA).
+  if (webRoot) {
+    app.register(fastifyStatic, { root: webRoot });
+    app.setNotFoundHandler((request, reply) => {
+      const path = (request.raw.url ?? '/').split('?')[0] ?? '/';
+      const reservada = ['/api', '/status', '/badge', '/embed'].some(
+        (prefix) => path === prefix || path.startsWith(`${prefix}/`),
+      );
+      const pideHtml = (request.headers.accept ?? '').includes('text/html');
+
+      if (request.method === 'GET' && pideHtml && !reservada) {
+        return reply.sendFile('index.html');
+      }
+
+      return reply.code(404).send({
+        message: `Route ${request.method}:${path} not found`,
+        error: 'Not Found',
+        statusCode: 404,
+      });
     });
   }
 

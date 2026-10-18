@@ -1,0 +1,38 @@
+# Blueprint de Render para Centinela: un único servicio web con la API, el
+# worker embebido, la status page y el panel compilado (la API sirve
+# apps/web/dist en producción). La base de datos vive en Neon.
+#
+# Uso: Render → New → Blueprint → conecta este repositorio; cuando pida
+# DATABASE_URL, pega la cadena directa de Neon (con sslmode=require) y listo.
+services:
+  - type: web
+    name: centinela
+    runtime: node
+    # El plan gratuito duerme el servicio tras un rato sin tráfico: los checks
+    # se pausan. Para vigilancia 24/7 hace falta Starter; free vale para
+    # probar el despliegue y enseñar la status page.
+    plan: starter
+    # Misma región que Neon (Frankfurt) para que los checks no crucen el charco.
+    region: frankfurt
+    branch: main
+    autoDeploy: true
+    buildCommand: pnpm install --frozen-lockfile && pnpm build && pnpm db:migrate
+    startCommand: node apps/api/dist/index.js
+    # Responde 200 incluso degradado: es una señal, no una sonda de caída.
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      # Neon, cadena DIRECTA (sin -pooler): el puente SSE usa LISTEN/NOTIFY.
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: WORKER_ENABLED
+        value: true
+      - key: WORKER_TICK_MS
+        value: 1000
+      - key: LOG_LEVEL
+        value: info

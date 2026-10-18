@@ -4,11 +4,10 @@ Monitorización de estado para proyectos propios: disponibilidad, latencia,
 certificados SSL y heartbeats, con una status page pública que vigila los
 despliegues de este portfolio.
 
-> **Estado: M7 — Endurecimiento.** La plataforma está lista para producción:
-> la guarda SSRF viaja pegada al socket, los avisos en vivo cruzan instancias
-> por `LISTEN/NOTIFY`, hay límites de peticiones, vigilancia del motor con
-> dead-man switch, copias de seguridad y apagado ordenado. Hoja de ruta
-> completa [aquí](#hoja-de-ruta).
+> **Estado: M8 — Listo para desplegar.** Pruebas de extremo a extremo con
+> Playwright, semilla reproducible, panel servido por la propia API en
+> producción y guía de Render + Neon paso a paso. Hoja de ruta completa
+> [aquí](#hoja-de-ruta).
 
 ## Cómo funciona
 
@@ -161,6 +160,8 @@ Todas las variables viven en el `.env` de la raíz (ver [`.env.example`](.env.ex
 | `pnpm db:migrate`           | Aplica las migraciones pendientes                                                 |
 | `pnpm db:studio`            | Abre Drizzle Studio                                                               |
 | `pnpm db:backup`            | Volcado restaurable de la base con rotación (ver [operación](docs/OPERATIONS.md)) |
+| `pnpm db:seed`              | Recrea la demo pública (espacio `demo`, 90 días de histórico)                     |
+| `pnpm e2e`                  | Pruebas de extremo a extremo (Playwright; antes, `pnpm e2e:install`)              |
 | `pnpm api:cli`              | Utilidades de operación (p. ej. `create-user`); requiere `pnpm build` previo      |
 
 ## Diseño
@@ -173,7 +174,8 @@ dirección completa (reglas duras, tokens y presupuesto de rendimiento) está en
 
 Copias de seguridad y restauración, dead-man switch, límites de peticiones,
 apagado ordenado y un runbook para las alertas están en
-[docs/OPERATIONS.md](docs/OPERATIONS.md).
+[docs/OPERATIONS.md](docs/OPERATIONS.md). El despliegue en Render + Neon, paso a
+paso, vive en [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Hoja de ruta
 
@@ -185,7 +187,7 @@ apagado ordenado y un runbook para las alertas están en
 - [x] **M5 — Status page:** pública con SSE, badges SVG y widget embebible
 - [x] **M6 — Panel de operador:** dashboard en vivo, gráficas SVG propias, editores, accesibilidad AA
 - [x] **M7 — Endurecimiento:** guarda SSRF en el socket, SSE multi-instancia por `LISTEN/NOTIFY`, límites por IP y por token, watchdog + dead-man switch, copias de seguridad y apagado ordenado ([manual de operación](docs/OPERATIONS.md))
-- [ ] **M8 — E2E y despliegue:** Playwright con servidor víctima, seed real, Render + Neon
+- [x] **M8 — E2E y despliegue:** pruebas de extremo a extremo con servidor víctima y CI, semilla reproducible (`db:seed`), panel servido por la API en producción y guía Render + Neon ([despliegue](docs/DEPLOYMENT.md))
 - [ ] **M9 — Servidor MCP:** consultar estado e incidencias desde un asistente
 - [ ] **M10 — Ficha en el portfolio:** captura, tecnologías y demo
 
