@@ -33,6 +33,9 @@ export function buildServer({ env, database, workerHealth }: BuildServerOptions)
   const app = Fastify({
     logger: loggerOptions(env),
     trustProxy: true,
+    // Al cerrar, los sockets en espera (keep-alive) se sueltan ya; las
+    // conexiones vivas (SSE) se despiden desde el hub antes de `close()`.
+    forceCloseConnections: 'idle',
   });
 
   // Cada petición lleva su contexto de autenticación (null hasta que el

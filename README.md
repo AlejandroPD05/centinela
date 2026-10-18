@@ -4,10 +4,11 @@ Monitorización de estado para proyectos propios: disponibilidad, latencia,
 certificados SSL y heartbeats, con una status page pública que vigila los
 despliegues de este portfolio.
 
-> **Estado: M6 — Panel de operador.** La consola ya está: dashboard en vivo,
-> detalle de monitor con cinta y percentiles, editores, canales con prueba de
-> entrega, incidencias, registro de entregas y gestión del espacio (miembros,
-> claves y auditoría). Hoja de ruta completa [aquí](#hoja-de-ruta).
+> **Estado: M7 — Endurecimiento.** La plataforma está lista para producción:
+> la guarda SSRF viaja pegada al socket, los avisos en vivo cruzan instancias
+> por `LISTEN/NOTIFY`, hay límites de peticiones, vigilancia del motor con
+> dead-man switch, copias de seguridad y apagado ordenado. Hoja de ruta
+> completa [aquí](#hoja-de-ruta).
 
 ## Cómo funciona
 
@@ -123,43 +124,56 @@ crea y te deja como `admin`. Entra con `POST /api/auth/login` o desde el panel.
 
 Todas las variables viven en el `.env` de la raíz (ver [`.env.example`](.env.example)):
 
-| Variable                    | Por defecto          | Qué hace                                             |
-| --------------------------- | -------------------- | ---------------------------------------------------- |
-| `HOST` / `PORT`             | `127.0.0.1` / `4100` | Escucha de la API                                    |
-| `DATABASE_URL`              | — (obligatoria)      | Conexión a PostgreSQL                                |
-| `LOG_LEVEL`                 | `info`               | Nivel de los logs (pino)                             |
-| `WORKER_ENABLED`            | `true`               | Motor de checks embebido en la API                   |
-| `WORKER_TICK_MS`            | `1000`               | Sonda entre ciclos cuando no hay trabajo             |
-| `WORKER_BATCH_SIZE`         | `10`                 | Monitores reclamados por ciclo                       |
-| `WORKER_CONCURRENCY`        | `5`                  | Checks ejecutados en paralelo                        |
-| `ALLOW_PRIVATE_TARGETS`     | `false`              | Permite rangos privados (solo desarrollo local)      |
-| `JWT_SECRET`                | — (obligatoria)      | Firma de los tokens de acceso (mínimo 32 caracteres) |
-| `ACCESS_TOKEN_TTL_SECONDS`  | `3600`               | Vida del token de acceso (JWT)                       |
-| `REFRESH_TOKEN_TTL_DAYS`    | `30`                 | Vida de las sesiones y del token de refresco         |
-| `LOGIN_ATTEMPTS_PER_MINUTE` | `10`                 | Intentos de login por IP y correo                    |
-| `SSL_RECHECK_HOURS`         | `24`                 | Cada cuántas horas se revisa el certificado TLS      |
-| `RESEND_API_KEY`            | — (opcional)         | Clave de Resend para el canal email                  |
-| `EMAIL_FROM`                | — (opcional)         | Remitente verificado en Resend                       |
+| Variable                       | Por defecto          | Qué hace                                             |
+| ------------------------------ | -------------------- | ---------------------------------------------------- |
+| `HOST` / `PORT`                | `127.0.0.1` / `4100` | Escucha de la API                                    |
+| `DATABASE_URL`                 | — (obligatoria)      | Conexión a PostgreSQL                                |
+| `LOG_LEVEL`                    | `info`               | Nivel de los logs (pino)                             |
+| `WORKER_ENABLED`               | `true`               | Motor de checks embebido en la API                   |
+| `WORKER_TICK_MS`               | `1000`               | Sonda entre ciclos cuando no hay trabajo             |
+| `WORKER_BATCH_SIZE`            | `10`                 | Monitores reclamados por ciclo                       |
+| `WORKER_CONCURRENCY`           | `5`                  | Checks ejecutados en paralelo                        |
+| `ALLOW_PRIVATE_TARGETS`        | `false`              | Permite rangos privados (solo desarrollo local)      |
+| `JWT_SECRET`                   | — (obligatoria)      | Firma de los tokens de acceso (mínimo 32 caracteres) |
+| `ACCESS_TOKEN_TTL_SECONDS`     | `3600`               | Vida del token de acceso (JWT)                       |
+| `REFRESH_TOKEN_TTL_DAYS`       | `30`                 | Vida de las sesiones y del token de refresco         |
+| `LOGIN_ATTEMPTS_PER_MINUTE`    | `10`                 | Intentos de login por IP y correo                    |
+| `RATE_LIMIT_PER_MINUTE`        | `600`                | Peticiones por minuto y por IP en `/api` (`0` off)   |
+| `PUBLIC_RATE_LIMIT_PER_MINUTE` | `300`                | Ídem en status page, badges, widget y fuentes        |
+| `HEARTBEAT_LIMIT_PER_MINUTE`   | `120`                | Latidos por minuto y por token (`0` off)             |
+| `WORKER_STALL_SECONDS`         | `300`                | Sin cerrar un ciclo: atasco (log + `degraded`)       |
+| `SELF_PING_URL`                | — (opcional)         | Check dead-man que el worker visita desde el bucle   |
+| `SELF_PING_SECONDS`            | `300`                | Cadencia de los avisos dead-man                      |
+| `SSL_RECHECK_HOURS`            | `24`                 | Cada cuántas horas se revisa el certificado TLS      |
+| `RESEND_API_KEY`               | — (opcional)         | Clave de Resend para el canal email                  |
+| `EMAIL_FROM`                   | — (opcional)         | Remitente verificado en Resend                       |
 
 ## Scripts
 
-| Comando                     | Qué hace                                                                     |
-| --------------------------- | ---------------------------------------------------------------------------- |
-| `pnpm dev`                  | Arranca shared en watch, API y panel a la vez                                |
-| `pnpm build`                | Compila todos los paquetes                                                   |
-| `pnpm typecheck`            | Comprueba tipos en todo el monorepo                                          |
-| `pnpm test`                 | Ejecuta la suite de Vitest                                                   |
-| `pnpm lint` / `pnpm format` | ESLint / Prettier                                                            |
-| `pnpm db:generate`          | Genera una migración a partir del esquema                                    |
-| `pnpm db:migrate`           | Aplica las migraciones pendientes                                            |
-| `pnpm db:studio`            | Abre Drizzle Studio                                                          |
-| `pnpm api:cli`              | Utilidades de operación (p. ej. `create-user`); requiere `pnpm build` previo |
+| Comando                     | Qué hace                                                                          |
+| --------------------------- | --------------------------------------------------------------------------------- |
+| `pnpm dev`                  | Arranca shared en watch, API y panel a la vez                                     |
+| `pnpm build`                | Compila todos los paquetes                                                        |
+| `pnpm typecheck`            | Comprueba tipos en todo el monorepo                                               |
+| `pnpm test`                 | Ejecuta la suite de Vitest                                                        |
+| `pnpm lint` / `pnpm format` | ESLint / Prettier                                                                 |
+| `pnpm db:generate`          | Genera una migración a partir del esquema                                         |
+| `pnpm db:migrate`           | Aplica las migraciones pendientes                                                 |
+| `pnpm db:studio`            | Abre Drizzle Studio                                                               |
+| `pnpm db:backup`            | Volcado restaurable de la base con rotación (ver [operación](docs/OPERATIONS.md)) |
+| `pnpm api:cli`              | Utilidades de operación (p. ej. `create-user`); requiere `pnpm build` previo      |
 
 ## Diseño
 
 La interfaz no es un dashboard genérico: es una consola de telemetría. La
 dirección completa (reglas duras, tokens y presupuesto de rendimiento) está en
 [docs/DESIGN.md](docs/DESIGN.md).
+
+## Operación
+
+Copias de seguridad y restauración, dead-man switch, límites de peticiones,
+apagado ordenado y un runbook para las alertas están en
+[docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ## Hoja de ruta
 
@@ -170,7 +184,7 @@ dirección completa (reglas duras, tokens y presupuesto de rendimiento) está en
 - [x] **M4 — API pública y accesos:** sesiones JWT con refresco rotatorio, roles por espacio, claves de API, OpenAPI servido por la API y auditoría
 - [x] **M5 — Status page:** pública con SSE, badges SVG y widget embebible
 - [x] **M6 — Panel de operador:** dashboard en vivo, gráficas SVG propias, editores, accesibilidad AA
-- [ ] **M7 — Endurecimiento:** dead-man switch, backups, límites y apagado ordenado
+- [x] **M7 — Endurecimiento:** guarda SSRF en el socket, SSE multi-instancia por `LISTEN/NOTIFY`, límites por IP y por token, watchdog + dead-man switch, copias de seguridad y apagado ordenado ([manual de operación](docs/OPERATIONS.md))
 - [ ] **M8 — E2E y despliegue:** Playwright con servidor víctima, seed real, Render + Neon
 - [ ] **M9 — Servidor MCP:** consultar estado e incidencias desde un asistente
 - [ ] **M10 — Ficha en el portfolio:** captura, tecnologías y demo

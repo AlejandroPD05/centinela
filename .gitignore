@@ -22,3 +22,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Copias de seguridad de la base (nunca al repositorio)
+backups/
