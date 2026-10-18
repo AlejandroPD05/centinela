@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
   bigserial,
   boolean,
@@ -26,6 +27,7 @@ export const roleEnum = pgEnum('role', ['admin', 'editor', 'viewer']);
 export const monitorTypeEnum = pgEnum('monitor_type', ['http', 'tcp', 'heartbeat']);
 export const httpMethodEnum = pgEnum('http_method', ['GET', 'HEAD']);
 export const checkStatusEnum = pgEnum('check_status', ['up', 'degraded', 'down', 'error']);
+export const monitorStateEnum = pgEnum('monitor_state', ['pending', 'up', 'degraded', 'down']);
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 
@@ -102,6 +104,14 @@ export const monitors = pgTable(
     isPublic: boolean('is_public').notNull().default(false),
     paused: boolean('paused').notNull().default(false),
 
+    // Estado agregado, programación y contadores de confirmación
+    state: monitorStateEnum('state').notNull().default('pending'),
+    nextCheckAt: timestamp('next_check_at', { withTimezone: true }).notNull().defaultNow(),
+    lastCheckAt: timestamp('last_check_at', { withTimezone: true }),
+    lastStateChangeAt: timestamp('last_state_change_at', { withTimezone: true }),
+    consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+    consecutiveSuccesses: integer('consecutive_successes').notNull().default(0),
+
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
@@ -111,6 +121,10 @@ export const monitors = pgTable(
   (table) => [
     uniqueIndex('monitors_workspace_slug_key').on(table.workspaceId, table.slug),
     index('monitors_workspace_idx').on(table.workspaceId),
+    /** Índice parcial: el scheduler solo busca monitores activos y vencidos. */
+    index('monitors_due_idx')
+      .on(table.nextCheckAt)
+      .where(sql`paused = false`),
   ],
 );
 

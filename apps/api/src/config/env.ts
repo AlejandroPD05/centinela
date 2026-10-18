@@ -2,6 +2,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
+/** Acepta `true/false` y `1/0` en el entorno (que siempre llega como texto). */
+const booleanish = (defaultValue: boolean) =>
+  z
+    .union([z.boolean(), z.enum(['true', 'false', '1', '0'])])
+    .default(defaultValue)
+    .transform((value) => value === true || value === 'true' || value === '1');
+
 /**
  * Configuración validada al arrancar: si algo falta o está mal, el proceso no
  * sale a flote. Mejor un error explícito en el log que un fallo raro a medias.
@@ -18,6 +25,15 @@ const envSchema = z.object({
       (value) => value.startsWith('postgres'),
       'DATABASE_URL debe ser una cadena de conexión de PostgreSQL',
     ),
+
+  // Motor de checks (worker embebido en la API).
+  WORKER_ENABLED: booleanish(true),
+  WORKER_TICK_MS: z.coerce.number().int().min(50).max(60_000).default(1000),
+  WORKER_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(10),
+  WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(50).default(5),
+
+  // Guarda SSRF: desactivable solo para desarrollo local y tests.
+  ALLOW_PRIVATE_TARGETS: booleanish(false),
 });
 
 export type Env = z.infer<typeof envSchema>;

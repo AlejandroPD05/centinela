@@ -43,9 +43,9 @@ jobs:
         run: pnpm lint
       - name: Tipos
         run: pnpm typecheck
-      - name: Tests
-        run: pnpm test
       - name: Migraciones contra PostgreSQL
         run: pnpm db:migrate
+      - name: Tests
+        run: pnpm test
       - name: Build
         run: pnpm build
