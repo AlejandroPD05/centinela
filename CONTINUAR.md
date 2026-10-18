@@ -24,7 +24,7 @@ E2E con Playwright, semilla demo de 90 días, servidor MCP y ficha en el
 portfolio.
 
 Verificación: 225 pruebas en verde (34 shared + 11 MCP + 180 API), 4 E2E
-(Playwright, con servidor víctima) y CI de GitHub en verde (ejecuciones #1 y #2).
+(Playwright, con servidor víctima) y CI de GitHub en verde.
 
 ## Lo que queda
 

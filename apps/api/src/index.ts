@@ -12,6 +12,12 @@ const { pool, db } = createDatabase(env.DATABASE_URL);
 let worker: WorkerHandle | null = null;
 const app = buildServer({ env, database: db, workerHealth: () => worker?.health() ?? null });
 
+// Las conexiones en reposo que se caen no tumban el proceso (lo guarda
+// db/client), pero merecen quedar en el registro del servicio.
+pool.on('error', (error) => {
+  app.log.error({ err: error }, 'conexión del pool de PostgreSQL caída en reposo');
+});
+
 worker = env.WORKER_ENABLED
   ? startWorker({
       db,
