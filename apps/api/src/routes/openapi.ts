@@ -87,7 +87,7 @@ const endpoints: EndpointDoc[] = [
     method: 'get',
     path: '/monitors',
     tag: 'monitores',
-    summary: 'Lista los monitores de tus espacios',
+    summary: 'Lista los monitores de tus espacios (filtra por workspaceId)',
     access: 'autenticada',
   },
   {
@@ -146,6 +146,20 @@ const endpoints: EndpointDoc[] = [
     summary: 'Incidencias con su timeline',
     access: 'autenticada',
   },
+  {
+    method: 'get',
+    path: '/monitors/{id}/checks',
+    tag: 'monitores',
+    summary: 'Últimos checks crudos (limit=1..200)',
+    access: 'autenticada',
+  },
+  {
+    method: 'get',
+    path: '/incidents',
+    tag: 'incidencias',
+    summary: 'Incidencias de tus espacios, la más reciente primero',
+    access: 'autenticada',
+  },
 
   // Latidos
   {
@@ -190,6 +204,20 @@ const endpoints: EndpointDoc[] = [
     path: '/channels/{id}',
     tag: 'canales',
     summary: 'Borra un canal',
+    access: 'autenticada',
+  },
+  {
+    method: 'post',
+    path: '/channels/{id}/test',
+    tag: 'canales',
+    summary: 'Envía un aviso de prueba por el canal',
+    access: 'autenticada',
+  },
+  {
+    method: 'get',
+    path: '/deliveries',
+    tag: 'avisos',
+    summary: 'Registro de entregas de avisos (status, limit)',
     access: 'autenticada',
   },
 
@@ -282,6 +310,11 @@ const tagDescriptions: Array<{ name: string; description: string }> = [
   { name: 'espacios', description: 'Espacios de trabajo y sus miembros.' },
   { name: 'claves de API', description: 'Credenciales personales para scripts e integraciones.' },
   { name: 'auditoría', description: 'Rastro de acciones sobre la plataforma.' },
+  {
+    name: 'incidencias',
+    description: 'Incidencias de tus espacios sin timeline: lectura rápida del panel.',
+  },
+  { name: 'avisos', description: 'Entregas de avisos: estado, intentos y motivo del fallo.' },
 ];
 
 /** Construye el documento OpenAPI a partir del registro de endpoints. */

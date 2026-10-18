@@ -1,5 +1,5 @@
 import { slugify, uptimeWindows, type UptimeWindow } from '@centinela/shared';
-import { asc, eq, inArray } from 'drizzle-orm';
+import { asc, desc, eq, inArray } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { recordAudit } from '../audit/record.js';
@@ -7,13 +7,15 @@ import { authUser, requireRole, workspaceRoles, type Authenticator } from '../au
 import { generateHeartbeatToken } from '../auth/tokens.js';
 import type { Database } from '../db/client.js';
 import { pgErrorInfo } from '../db/errors.js';
-import { monitors } from '../db/schema.js';
+import { checkResults, monitors } from '../db/schema.js';
 import { getDailyBuckets, getUptimeSummary, listIncidents } from '../history/queries.js';
 
 const uuidSchema = z.uuid();
 const windowSchema = z.enum(uptimeWindows);
 const daysSchema = z.coerce.number().int().min(1).max(365);
 const limitSchema = z.coerce.number().int().min(1).max(100);
+const checksLimitSchema = z.coerce.number().int().min(1).max(200);
+const listQuerySchema = z.object({ workspaceId: uuidSchema.optional() });
 
 type MonitorRow = typeof monitors.$inferSelect;
 type MonitorInsert = typeof monitors.$inferInsert;
@@ -136,6 +138,7 @@ function toMonitorView(monitor: MonitorRow) {
 
   return {
     id: monitor.id,
+    workspaceId: monitor.workspaceId,
     name: monitor.name,
     slug: monitor.slug,
     type: monitor.type,
@@ -220,21 +223,36 @@ export function monitorRoutes(
   database: Database,
   authenticate: Authenticator,
 ): void {
-  app.get('/monitors', { preHandler: authenticate }, async (request) => {
-    const user = authUser(request);
+  app.get<{ Querystring: { workspaceId?: string } }>(
+    '/monitors',
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const user = authUser(request);
 
-    const roles = await workspaceRoles(database, user.id);
-    const workspaceIds = [...roles.keys()];
-    if (workspaceIds.length === 0) return { monitors: [] };
+      const query = listQuerySchema.safeParse(request.query);
+      if (!query.success) return reply.code(400).send({ error: 'filtros inválidos' });
 
-    const rows = await database
-      .select()
-      .from(monitors)
-      .where(inArray(monitors.workspaceId, workspaceIds))
-      .orderBy(asc(monitors.name));
+      const roles = await workspaceRoles(database, user.id);
+      let workspaceIds = [...roles.keys()];
 
-    return { monitors: rows.map(toMonitorView) };
-  });
+      if (query.data.workspaceId) {
+        if (!workspaceIds.includes(query.data.workspaceId)) {
+          return reply.code(403).send({ error: 'no perteneces a este espacio de trabajo' });
+        }
+        workspaceIds = [query.data.workspaceId];
+      }
+
+      if (workspaceIds.length === 0) return { monitors: [] };
+
+      const rows = await database
+        .select()
+        .from(monitors)
+        .where(inArray(monitors.workspaceId, workspaceIds))
+        .orderBy(asc(monitors.name));
+
+      return { monitors: rows.map(toMonitorView) };
+    },
+  );
 
   app.post('/monitors', { preHandler: authenticate }, async (request, reply) => {
     const user = authUser(request);
@@ -408,6 +426,51 @@ export function monitorRoutes(
       if (!monitor) return;
 
       return { incidents: await listIncidents(database, monitor.id, limit.data) };
+    },
+  );
+
+  app.get<{ Params: { id: string }; Querystring: { limit?: string } }>(
+    '/monitors/:id/checks',
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const limit = checksLimitSchema.safeParse(request.query.limit ?? '50');
+      if (!limit.success) {
+        return reply.code(400).send({ error: 'limit debe ser un entero entre 1 y 200' });
+      }
+
+      const monitor = await loadMonitorWithAccess(
+        database,
+        request,
+        reply,
+        request.params.id,
+        'viewer',
+      );
+      if (!monitor) return;
+
+      const rows = await database
+        .select({
+          id: checkResults.id,
+          status: checkResults.status,
+          latencyMs: checkResults.latencyMs,
+          statusCode: checkResults.statusCode,
+          error: checkResults.error,
+          checkedAt: checkResults.checkedAt,
+        })
+        .from(checkResults)
+        .where(eq(checkResults.monitorId, monitor.id))
+        .orderBy(desc(checkResults.checkedAt), desc(checkResults.id))
+        .limit(limit.data);
+
+      return {
+        checks: rows.map((row) => ({
+          id: row.id,
+          at: row.checkedAt.toISOString(),
+          status: row.status,
+          latencyMs: row.latencyMs,
+          statusCode: row.statusCode,
+          error: row.error,
+        })),
+      };
     },
   );
 

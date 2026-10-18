@@ -1,3 +1,4 @@
+import type { NotificationPayload } from '@centinela/shared';
 import { asc, eq, inArray } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -8,6 +9,8 @@ import type { Env } from '../config/env.js';
 import type { Database } from '../db/client.js';
 import { pgErrorInfo } from '../db/errors.js';
 import { notificationChannels, workspaces } from '../db/schema.js';
+import { sendDelivery } from '../notify/adapters.js';
+import { NOTIFICATION_TIMEOUT_MS } from '../notify/config.js';
 
 const idSchema = z.uuid();
 const nameSchema = z.string().trim().min(1).max(80);
@@ -245,6 +248,74 @@ export function channelRoutes(
       });
 
       return reply.code(204).send();
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/channels/:id/test',
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const user = authUser(request);
+
+      const id = idSchema.safeParse(request.params.id);
+      if (!id.success) return reply.code(400).send({ error: 'id de canal inválido' });
+
+      const [channel] = await database
+        .select()
+        .from(notificationChannels)
+        .where(eq(notificationChannels.id, id.data));
+
+      if (!channel) return reply.code(404).send({ error: 'canal no encontrado' });
+      if (!(await requireRole(database, request, reply, channel.workspaceId, 'editor'))) return;
+
+      // El aviso de prueba usa la piel real de los avisos (mismo formato que
+      // una caída) con un monitor sintético que se anuncia como prueba: así
+      // el operador ve exactamente lo que recibirá el día que algo caiga.
+      const at = new Date().toISOString();
+      const payload: NotificationPayload = {
+        kind: 'down',
+        at,
+        monitor: {
+          id: channel.id,
+          name: 'Prueba de Centinela',
+          slug: 'prueba-de-centinela',
+          type: 'http',
+          target: `${channel.type} · ${channel.name}`,
+        },
+        incident: {
+          id: channel.id,
+          startedAt: at,
+          cause: 'comprobación manual desde la consola; no hay ninguna incidencia real',
+          durationSeconds: null,
+        },
+        ssl: null,
+      };
+
+      const result = await sendDelivery(
+        { type: channel.type, name: channel.name, config: channel.config },
+        payload,
+        {
+          timeoutMs: NOTIFICATION_TIMEOUT_MS,
+          resendApiKey: env.RESEND_API_KEY,
+          emailFrom: env.EMAIL_FROM,
+        },
+      );
+
+      await recordAudit(database, {
+        userId: user.id,
+        workspaceId: channel.workspaceId,
+        action: 'channel.test',
+        targetType: 'channel',
+        targetId: channel.id,
+        detail: { name: channel.name, type: channel.type, ok: result.ok },
+        ip: request.ip,
+      });
+
+      if (!result.ok) {
+        return reply.code(502).send({ error: `el canal no aceptó el aviso: ${result.error}` });
+      }
+
+      return { ok: true, message: `aviso de prueba entregado por «${channel.name}»` };
     },
   );
 }

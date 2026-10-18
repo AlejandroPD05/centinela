@@ -8,8 +8,10 @@ import { apiKeyRoutes } from './routes/api-keys.js';
 import { auditRoutes } from './routes/audit.js';
 import { authRoutes } from './routes/auth.js';
 import { channelRoutes } from './routes/channels.js';
+import { deliveryRoutes } from './routes/deliveries.js';
 import { healthRoutes } from './routes/health.js';
 import { heartbeatRoutes } from './routes/heartbeats.js';
+import { incidentRoutes } from './routes/incidents.js';
 import { monitorRoutes } from './routes/monitors.js';
 import { openApiRoutes } from './routes/openapi.js';
 import { statusRoutes } from './routes/status.js';
@@ -69,8 +71,10 @@ export function buildServer({ env, database }: BuildServerOptions): FastifyInsta
         apiKeyRoutes(api, database, authenticate);
         auditRoutes(api, database, authenticate);
         monitorRoutes(api, database, authenticate);
+        incidentRoutes(api, database, authenticate);
         heartbeatRoutes(api, database);
         channelRoutes(api, database, env, authenticate);
+        deliveryRoutes(api, database, authenticate);
       }
     },
     { prefix: '/api' },
