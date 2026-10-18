@@ -63,6 +63,9 @@ export interface DailyBucket {
   available: number;
   availability: number | null;
   avgLatencyMs: number | null;
+  /** Checks degradados y caídos del día (mismo corte que la cinta pública). */
+  degraded: number;
+  down: number;
 }
 
 /**
@@ -81,6 +84,8 @@ export async function getDailyBuckets(
       day: sql<string>`to_char(date_trunc('day', ${checkResults.checkedAt} at time zone 'UTC'), 'YYYY-MM-DD')`,
       total: sql<number>`count(*)::int`,
       available: sql<number>`(count(*) filter (where ${availableFilter}))::int`,
+      degraded: sql<number>`(count(*) filter (where ${checkResults.status} = 'degraded'))::int`,
+      down: sql<number>`(count(*) filter (where ${checkResults.status} in ('down', 'error')))::int`,
       avgLatency: sql<
         number | null
       >`avg(${checkResults.latencyMs}) filter (where ${availableFilter})`,
@@ -104,6 +109,8 @@ export async function getDailyBuckets(
       available: row?.available ?? 0,
       availability: row !== undefined && row.total > 0 ? row.available / row.total : null,
       avgLatencyMs: round1(row?.avgLatency ?? null),
+      degraded: row?.degraded ?? 0,
+      down: row?.down ?? 0,
     });
   }
 

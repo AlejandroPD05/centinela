@@ -301,9 +301,31 @@ describe.runIf(dbAvailable)('consola — ampliaciones de API en integración', (
   it('el listado incluye el espacio y acepta filtrar por workspaceId', async () => {
     const all = await app.inject({ method: 'GET', url: '/api/monitors', headers: adminHeaders });
     expect(all.statusCode).toBe(200);
-    const monitorsAll = (all.json() as { monitors: Array<{ workspaceId: string }> }).monitors;
+    const monitorsAll = (
+      all.json() as {
+        monitors: Array<{
+          workspaceId: string;
+          name: string;
+          stats: {
+            day: { total: number; available: number; ratio: number | null };
+            openIncidents: number;
+          } | null;
+        }>;
+      }
+    ).monitors;
     expect(monitorsAll).toHaveLength(2);
     expect(monitorsAll.every((row) => row.workspaceId === workspaceId)).toBe(true);
+
+    // Estadísticas agregadas: 4 checks en 24 h (3 disponibles) y una abierta.
+    const api = monitorsAll.find((row) => row.name === 'API de ejemplo');
+    expect(api?.stats).toMatchObject({
+      day: { total: 4, available: 3, ratio: 0.75 },
+      openIncidents: 1,
+    });
+
+    // Sin checks: ratio nulo, nunca cero (lo que no se ha medido no es 0 %).
+    const tcp = monitorsAll.find((row) => row.name === 'Puerto de respaldo');
+    expect(tcp?.stats).toMatchObject({ day: { total: 0, ratio: null }, openIncidents: 0 });
 
     const filtered = await app.inject({
       method: 'GET',

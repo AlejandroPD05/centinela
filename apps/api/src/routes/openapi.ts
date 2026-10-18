@@ -87,7 +87,7 @@ const endpoints: EndpointDoc[] = [
     method: 'get',
     path: '/monitors',
     tag: 'monitores',
-    summary: 'Lista los monitores de tus espacios (filtra por workspaceId)',
+    summary: 'Lista los monitores de tus espacios con agregados (24 h, 7 d, abiertas)',
     access: 'autenticada',
   },
   {

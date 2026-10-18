@@ -1,5 +1,5 @@
 import { slugify, uptimeWindows, type UptimeWindow } from '@centinela/shared';
-import { asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { recordAudit } from '../audit/record.js';
@@ -7,7 +7,7 @@ import { authUser, requireRole, workspaceRoles, type Authenticator } from '../au
 import { generateHeartbeatToken } from '../auth/tokens.js';
 import type { Database } from '../db/client.js';
 import { pgErrorInfo } from '../db/errors.js';
-import { checkResults, monitors } from '../db/schema.js';
+import { checkResults, incidents, monitors } from '../db/schema.js';
 import { getDailyBuckets, getUptimeSummary, listIncidents } from '../history/queries.js';
 
 const uuidSchema = z.uuid();
@@ -129,11 +129,79 @@ const patchableFields: Record<MonitorRow['type'], ReadonlyArray<keyof PatchInput
   ],
 };
 
+/** Agregados rápidos de un monitor para la consola (ventanas y incidencias). */
+interface MonitorStats {
+  day: { total: number; available: number; ratio: number | null };
+  week: { total: number; available: number; ratio: number | null };
+  openIncidents: number;
+}
+
+function statsWindow(
+  available: number | undefined,
+  total: number | undefined,
+): MonitorStats['day'] {
+  const safeTotal = total ?? 0;
+  const safeAvailable = available ?? 0;
+  return {
+    total: safeTotal,
+    available: safeAvailable,
+    ratio: safeTotal === 0 ? null : safeAvailable / safeTotal,
+  };
+}
+
+/**
+ * Estadísticas de todos los monitores pedidos en dos consultas agregadas:
+ * ventanas de 24 h / 7 d e incidencias abiertas. El listado del panel no
+ * necesita más para pintarse entero.
+ */
+async function loadMonitorStats(
+  database: Database,
+  monitorIds: string[],
+): Promise<Map<string, MonitorStats>> {
+  const stats = new Map<string, MonitorStats>();
+  if (monitorIds.length === 0) return stats;
+
+  const available = sql`${checkResults.status} in ('up', 'degraded')`;
+
+  const rows = await database
+    .select({
+      monitorId: checkResults.monitorId,
+      dayTotal: sql<number>`(count(*) filter (where ${checkResults.checkedAt} >= now() - interval '24 hours'))::int`,
+      dayAvailable: sql<number>`(count(*) filter (where ${checkResults.checkedAt} >= now() - interval '24 hours' and ${available}))::int`,
+      weekTotal: sql<number>`(count(*) filter (where ${checkResults.checkedAt} >= now() - interval '7 days'))::int`,
+      weekAvailable: sql<number>`(count(*) filter (where ${checkResults.checkedAt} >= now() - interval '7 days' and ${available}))::int`,
+    })
+    .from(checkResults)
+    .where(inArray(checkResults.monitorId, monitorIds))
+    .groupBy(checkResults.monitorId);
+
+  const byMonitor = new Map(rows.map((row) => [row.monitorId, row]));
+
+  const openRows = await database
+    .select({ monitorId: incidents.monitorId, total: sql<number>`count(*)::int` })
+    .from(incidents)
+    .where(and(inArray(incidents.monitorId, monitorIds), isNull(incidents.resolvedAt)))
+    .groupBy(incidents.monitorId);
+
+  const openByMonitor = new Map(openRows.map((row) => [row.monitorId, row.total]));
+
+  for (const id of monitorIds) {
+    const row = byMonitor.get(id);
+    stats.set(id, {
+      day: statsWindow(row?.dayAvailable, row?.dayTotal),
+      week: statsWindow(row?.weekAvailable, row?.weekTotal),
+      openIncidents: openByMonitor.get(id) ?? 0,
+    });
+  }
+
+  return stats;
+}
+
 /**
  * Proyección segura de un monitor: el token de heartbeat y cualquier campo
  * interno se quedan dentro. Las URLs de los servicios vigilados no son secretas.
  */
-function toMonitorView(monitor: MonitorRow) {
+function toMonitorView(monitor: MonitorRow, stats: MonitorStats | null = null) {
   const isHttps = monitor.url !== null && monitor.url.startsWith('https://');
 
   return {
@@ -164,6 +232,7 @@ function toMonitorView(monitor: MonitorRow) {
             error: monitor.sslError,
           }
         : null,
+    stats,
   };
 }
 
@@ -250,7 +319,12 @@ export function monitorRoutes(
         .where(inArray(monitors.workspaceId, workspaceIds))
         .orderBy(asc(monitors.name));
 
-      return { monitors: rows.map(toMonitorView) };
+      const stats = await loadMonitorStats(
+        database,
+        rows.map((row) => row.id),
+      );
+
+      return { monitors: rows.map((row) => toMonitorView(row, stats.get(row.id) ?? null)) };
     },
   );
 
