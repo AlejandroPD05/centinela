@@ -17,6 +17,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "e2e": "pnpm --filter @centinela/api build && pnpm --filter @centinela/e2e e2e",
+    "e2e:install": "pnpm --filter @centinela/e2e e2e:install",
     "db:generate": "pnpm --filter @centinela/api run db:generate",
     "db:migrate": "pnpm --filter @centinela/api run db:migrate",
     "db:studio": "pnpm --filter @centinela/api run db:studio",

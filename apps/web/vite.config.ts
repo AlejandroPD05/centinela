@@ -4,7 +4,9 @@ import { defineConfig } from 'vite';
 
 // En desarrollo, todo lo que no es el panel va a la API (4100): los mismos
 // caminos que en producción comparten origen (status, badges, widget, fuentes).
-const api = 'http://127.0.0.1:4100';
+// Las pruebas E2E levantan su propia API y apuntan aquí con CENTINELA_API.
+declare const process: { env: Record<string, string | undefined> };
+const api = process.env.CENTINELA_API ?? 'http://127.0.0.1:4100';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],

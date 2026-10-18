@@ -23,5 +23,9 @@ Thumbs.db
 # Logs
 *.log
 
+# Pruebas de extremo a extremo (Playwright)
+apps/e2e/results/
+playwright-report/
+
 # Copias de seguridad de la base (nunca al repositorio)
 backups/
