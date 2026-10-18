@@ -21,6 +21,7 @@
     "db:migrate": "pnpm --filter @centinela/api run db:migrate",
     "db:studio": "pnpm --filter @centinela/api run db:studio",
     "db:backup": "node scripts/db-backup.mjs",
+    "db:seed": "pnpm --filter @centinela/api run cli seed-demo",
     "api:cli": "pnpm --filter @centinela/api run cli"
   },
   "devDependencies": {
