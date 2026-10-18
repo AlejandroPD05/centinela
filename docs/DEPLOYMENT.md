@@ -70,6 +70,13 @@ DATABASE_URL="postgresql://…neon.tech/centinela?sslmode=require" \
   --workspace centinela --role admin
 ```
 
+En PowerShell (Windows):
+
+```powershell
+$env:DATABASE_URL = "postgresql://…neon.tech/centinela?sslmode=require"
+pnpm api:cli create-user --email tu@correo --name Alejandro --workspace centinela --role admin
+```
+
 Se te pedirá una contraseña de al menos 8 caracteres. Alternativa sin salir de
 Render: **Shell** del servicio y `node apps/api/dist/cli.js create-user …`
 (requiere que el disco tenga el build, que lo tiene).
