@@ -10,7 +10,8 @@ import type { MonitorRow } from '../checks/run.js';
  * worker pueden competir por la cola sin pisarse (patrón de cola de PostgreSQL).
  * El siguiente check lleva un jitter de ±10 % para evitar rebaños a la misma hora.
  *
- * Los heartbeats aún no pasan por el scheduler (su supervisión llega en M3).
+ * Los monitores de latido también pasan por aquí: su siguiente cita se
+ * reprograma al completar el tick (plazo = periodo + gracia).
  */
 export async function claimDueMonitors(db: Database, limit: number): Promise<MonitorRow[]> {
   const due = db
@@ -20,7 +21,7 @@ export async function claimDueMonitors(db: Database, limit: number): Promise<Mon
       and(
         eq(monitors.paused, false),
         lte(monitors.nextCheckAt, sql`now()`),
-        inArray(monitors.type, ['http', 'tcp']),
+        inArray(monitors.type, ['http', 'tcp', 'heartbeat']),
       ),
     )
     .orderBy(asc(monitors.nextCheckAt))

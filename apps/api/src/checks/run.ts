@@ -50,7 +50,7 @@ export async function runMonitorCheck(
         return {
           status: 'error',
           latencyMs: 0,
-          error: `el worker todavía no ejecuta monitores de tipo «${monitor.type}»`,
+          error: `el worker no sabe ejecutar monitores de tipo «${monitor.type}»`,
         };
     }
   } catch (error) {

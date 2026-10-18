@@ -1,9 +1,11 @@
+import type { NotificationChannelConfig, NotificationPayload } from '@centinela/shared';
 import { sql } from 'drizzle-orm';
 import {
   bigserial,
   boolean,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   primaryKey,
@@ -15,12 +17,13 @@ import {
 } from 'drizzle-orm/pg-core';
 
 /**
- * Esquema de datos de Centinela (M0–M1).
+ * Esquema de datos de Centinela (M0–M3).
  *
  * Criterios:
  * - UUID para entidades; bigserial para series temporales (check_results).
  * - Todo cambio de esquema se aplica por migración (drizzle-kit generate).
- * - Las tablas de incidencias, canales y avisos SSL llegan en M2–M3.
+ * - Los datos externos (config de canales, payload de avisos) viven en jsonb
+ *   con su tipo TypeScript y se validan al escribir (zod, rutas).
  */
 
 export const roleEnum = pgEnum('role', ['admin', 'editor', 'viewer']);
@@ -119,11 +122,12 @@ export const monitors = pgTable(
     consecutiveSuccesses: integer('consecutive_successes').notNull().default(0),
 
     // Certificado TLS (solo monitores HTTP https; se sondea cada SSL_RECHECK_HOURS)
-    // Certificado TLS (solo monitores HTTP https; se sondea cada SSL_RECHECK_HOURS)
     sslExpiresAt: timestamp('ssl_expires_at', { withTimezone: true }),
     sslCheckedAt: timestamp('ssl_checked_at', { withTimezone: true }),
     sslIssuer: text('ssl_issuer'),
     sslError: text('ssl_error'),
+    /** Última etapa de aviso SSL ya notificada (0–5): evita repetir el aviso. */
+    sslAlertStage: integer('ssl_alert_stage').notNull().default(0),
 
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
@@ -195,4 +199,64 @@ export const incidentEvents = pgTable(
     happenedAt: timestamp('happened_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index('incident_events_incident_idx').on(table.incidentId, table.happenedAt)],
+);
+
+export const notificationChannelTypeEnum = pgEnum('notification_channel_type', [
+  'discord',
+  'webhook',
+  'email',
+]);
+export const deliveryKindEnum = pgEnum('delivery_kind', ['down', 'recovered', 'ssl']);
+export const deliveryStatusEnum = pgEnum('delivery_status', ['pending', 'sent', 'failed']);
+
+/** Canal de aviso de un espacio de trabajo (Discord, webhook genérico o email). */
+export const notificationChannels = pgTable(
+  'notification_channels',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    type: notificationChannelTypeEnum('type').notNull(),
+    name: text('name').notNull(),
+    /** Configuración según el tipo (discord: webhookUrl, ...); validada al escribir. */
+    config: jsonb('config')
+      .$type<NotificationChannelConfig>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    enabled: boolean('enabled').notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('notification_channels_workspace_name_key').on(table.workspaceId, table.name),
+  ],
+);
+
+/**
+ * Cola de entregas de avisos. El worker la drena con `SKIP LOCKED`; cada
+ * intento consume `attempts` y aparca el siguiente con backoff exponencial.
+ * La entrega guarda una instantánea del evento: el canal no consulta nada más.
+ */
+export const deliveries = pgTable(
+  'deliveries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    channelId: uuid('channel_id')
+      .notNull()
+      .references(() => notificationChannels.id, { onDelete: 'cascade' }),
+    monitorId: uuid('monitor_id')
+      .notNull()
+      .references(() => monitors.id, { onDelete: 'cascade' }),
+    /** Incidencia asociada, si el aviso nace de una caída o recuperación. */
+    incidentId: uuid('incident_id').references(() => incidents.id, { onDelete: 'cascade' }),
+    kind: deliveryKindEnum('kind').notNull(),
+    payload: jsonb('payload').$type<NotificationPayload>().notNull(),
+    status: deliveryStatusEnum('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    lastError: text('last_error'),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [index('deliveries_due_idx').on(table.status, table.nextAttemptAt)],
 );

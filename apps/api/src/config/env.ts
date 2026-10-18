@@ -37,6 +37,11 @@ const envSchema = z.object({
 
   // Revisión del certificado TLS de los monitores https.
   SSL_RECHECK_HOURS: z.coerce.number().int().min(1).max(720).default(24),
+
+  // Avisos por email vía Resend (opcionales: sin claves, el canal email falla
+  // con un motivo claro en lugar de tumbar el worker).
+  RESEND_API_KEY: z.string().min(1).optional(),
+  EMAIL_FROM: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

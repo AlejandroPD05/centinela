@@ -19,6 +19,8 @@ const worker = env.WORKER_ENABLED
         concurrency: env.WORKER_CONCURRENCY,
         allowPrivateTargets: env.ALLOW_PRIVATE_TARGETS,
         sslRecheckHours: env.SSL_RECHECK_HOURS,
+        resendApiKey: env.RESEND_API_KEY,
+        emailFrom: env.EMAIL_FROM,
       },
     })
   : null;

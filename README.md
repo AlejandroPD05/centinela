@@ -4,9 +4,9 @@ Monitorización de estado para proyectos propios: disponibilidad, latencia,
 certificados SSL y heartbeats, con una status page pública que vigila los
 despliegues de este portfolio.
 
-> **Estado: M2 — histórico.** Además del motor de checks, Centinela ya guarda
-> incidencias con timeline, resume disponibilidad y percentiles por ventanas y
-> vigila la caducidad de los certificados TLS. Hoja de ruta completa
+> **Estado: M3 — notificaciones y heartbeats.** Centinela ya avisa solo: canales
+> de Discord, webhook y email con reintentos y registro de entregas, latidos de
+> entrada y alertas de caducidad SSL. Hoja de ruta completa
 > [aquí](#hoja-de-ruta).
 
 ## Cómo funciona
@@ -28,7 +28,7 @@ latencia y motivo del fallo.
 Una máquina de estados con umbrales (`confirm_failures` / `confirm_recoveries`)
 decide cuándo un monitor pasa a `down` o recupera: un hipo de un segundo no abre
 incidencia. El siguiente check se programa con un jitter del ±10 % para evitar
-rebaños. (Los heartbeats de entrada llegan en M3.)
+rebaños.
 
 Cada caída confirmada abre una **incidencia** con el motivo del primer fallo; la
 recuperación la cierra y ambas quedan apuntadas en su timeline de eventos. La API
@@ -37,7 +37,17 @@ percentiles de latencia (p50/p95/p99) calculados en PostgreSQL, más una serie
 diaria rellenada para que la cinta de 90 días no tenga huecos. En los monitores
 https se lee además el **certificado TLS** (caducidad y emisor) cada
 `SSL_RECHECK_HOURS`, sin validarlo: un certificado caducado o autofirmado es
-justo lo que hay que enseñar (los avisos llegan en M3).
+justo lo que hay que enseñar.
+
+Los **avisos** salen por los canales del espacio (Discord, webhook genérico o
+email vía Resend): cada caída, recuperación y cruce de umbral SSL (30, 14, 7, 3
+y 1 días) encola una entrega por canal activo. El worker drena la cola con el
+mismo patrón `SKIP LOCKED`, con timeout, tres intentos y backoff exponencial
+(30 s, 60 s, 120 s); una entrega solo cuenta como enviada cuando el canal
+responde, y queda registrada en `deliveries` y en el timeline de su incidencia.
+Los **latidos de entrada** (`POST/GET /api/heartbeats/:token`) son un monitor
+más: si el ping no llega dentro de periodo + gracia, el worker lo declara
+caído, y cada latido entrante cuenta como un check correcto.
 
 ## Stack
 
@@ -94,6 +104,8 @@ Todas las variables viven en el `.env` de la raíz (ver [`.env.example`](.env.ex
 | `WORKER_CONCURRENCY`    | `5`                  | Checks ejecutados en paralelo                   |
 | `ALLOW_PRIVATE_TARGETS` | `false`              | Permite rangos privados (solo desarrollo local) |
 | `SSL_RECHECK_HOURS`     | `24`                 | Cada cuántas horas se revisa el certificado TLS |
+| `RESEND_API_KEY`        | — (opcional)         | Clave de Resend para el canal email             |
+| `EMAIL_FROM`            | — (opcional)         | Remitente verificado en Resend                  |
 
 ## Scripts
 
@@ -119,7 +131,7 @@ dirección completa (reglas duras, tokens y presupuesto de rendimiento) está en
 - [x] **M0 — Base operativa:** monorepo, API con `/api/health`, esquema y migraciones, CI, primera pantalla
 - [x] **M1 — Motor de checks:** HTTP y TCP con guarda SSRF, scheduler `SKIP LOCKED` con jitter, máquina de estados con umbrales, integración real contra PostgreSQL
 - [x] **M2 — Histórico:** uptime 24 h / 7 d / 30 d / 90 d, percentiles, incidencias con timeline, estado del certificado SSL
-- [ ] **M3 — Notificaciones y heartbeats:** Discord, email y webhooks; heartbeats de entrada; cooldowns, reintentos y registro de entregas
+- [x] **M3 — Notificaciones y heartbeats:** Discord, webhook y email; latidos de entrada; reintentos con backoff y registro de entregas
 - [ ] **M4 — API pública y accesos:** JWT, roles (admin/editor/visor), claves de API, OpenAPI, auditoría
 - [ ] **M5 — Status page:** pública con SSE, badges SVG y widget embebible
 - [ ] **M6 — Panel de operador:** dashboard en vivo, gráficas SVG propias, editores, accesibilidad AA
