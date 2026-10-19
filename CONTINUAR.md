@@ -8,7 +8,8 @@ bórrala sin más.
 | Qué                       | Dónde                                                                                                                                              |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Código                    | [github.com/AlejandroPD05/centinela](https://github.com/AlejandroPD05/centinela) (público, CI en verde)                                            |
-| Demo desplegada           | <https://centinela-90g3.onrender.com/> · status page: <https://centinela-90g3.onrender.com/status/demo>                                            |
+| Panel en Vercel           | <https://centinela-lake.vercel.app> (proyecto `centinela`, conectado al repositorio, autoDeploy en `main`)                                         |
+| Backend en Render         | <https://centinela-90g3.onrender.com/> · status page: <https://centinela-90g3.onrender.com/status/demo>                                            |
 | Panel de Render           | <https://dashboard.render.com/web/srv-dbb2olvf3r2c73828kqg> (servicio `centinela`, Frankfurt, plan free)                                           |
 | Base de datos             | Neon, proyecto `centinela` (`spring-frog-89581907`), región `aws-eu-central-1`, PostgreSQL 17, cadena directa con `sslmode=require`                |
 | Carpeta local             | `C:\Users\OneCu\Desktop\Personal\Yo\Profesional\Proyectos personales\Centinela`                                                                    |
@@ -35,6 +36,8 @@ Despliegue verificado el 19/10/2026:
 - `/status/demo`, `/embed/demo` y `/badge/demo/api-demo.svg` responden 200.
 - Login del administrador correcto; espacio `centinela` con rol `admin`.
 - Demo sembrada: 7 monitores, 116.647 checks de 90 días y 3 incidencias.
+- Panel en Vercel: `/`, `/login`, `/api/*`, `/status/demo`, el badge y las
+  fuentes responden 200 a través de los _rewrites_ al backend de Render.
 - Usuario administrador: `alejandroprietodiez05@gmail.com` (contraseña
   entregada al desplegar; no se guarda en el repositorio).
 
@@ -45,7 +48,7 @@ Despliegue verificado el 19/10/2026:
 El servicio está en el plan **free** de Render: se duerme tras unos minutos sin
 tráfico y los checks se pausan. Para vigilancia real, cambiar `plan: free` por
 `plan: starter` en `render.yaml` y añadir el método de pago en Render
-(~7 $/mes). La guía lo explica en la §7.
+(~7 $/mes). La guía lo explica en la §8.
 
 ### 2. Monitores reales e insignias
 
@@ -61,7 +64,7 @@ El espacio `demo` es solo escaparate. Para vigilar los proyectos de verdad:
 ### 3. Ideas opcionales
 
 - Canal email con Resend (solo faltan las claves, el código ya está).
-- Dominio propio `status.<tu-dominio>` (CNAME en Render, §4 de la guía).
+- Dominio propio `status.<tu-dominio>` (CNAME en Render, §5 de la guía).
 - Pinear el repositorio en el perfil de GitHub.
 
 ## Retomar el entorno en local (Windows)
@@ -81,8 +84,8 @@ pnpm dev                      # API en http://127.0.0.1:4100 y panel en 4101
 - Pruebas: `pnpm test` (225) y `pnpm e2e` (4; la primera vez,
   `pnpm e2e:install`).
 - Servidor MCP: `pnpm build && pnpm mcp` (config en el README).
-- Producción: `render.yaml` con `plan: free`; Neon ya tiene la base y las
-  migraciones aplicadas.
+- Producción: `render.yaml` con `plan: free` y el panel en Vercel
+  (`vercel.json`); Neon ya tiene la base y las migraciones aplicadas.
 
 ## Notas de la parada (19/10/2026)
 
@@ -97,3 +100,7 @@ pnpm dev                      # API en http://127.0.0.1:4100 y panel en 4101
 - El despliegue se creó por API, no como Blueprint: los cambios en
   `render.yaml` no alteran el servicio ya creado, pero los pushes a `main` sí
   redeployan con `autoDeploy`.
+- Vercel CLI autenticada (`npx vercel whoami` → `alejandropd05`), proyecto
+  `centinela` del equipo `me-myself-and-i-8b2d` conectado al repositorio: cada
+  push a `main` publica el panel. Los _rewrites_ de `vercel.json` apuntan al
+  backend de Render.

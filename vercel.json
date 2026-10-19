@@ -1,0 +1,42 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm --filter @centinela/shared build && pnpm --filter @centinela/web build",
+  "outputDirectory": "apps/web/dist",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://centinela-90g3.onrender.com/api/$1"
+    },
+    {
+      "source": "/status/(.*)",
+      "destination": "https://centinela-90g3.onrender.com/status/$1"
+    },
+    {
+      "source": "/badge/(.*)",
+      "destination": "https://centinela-90g3.onrender.com/badge/$1"
+    },
+    {
+      "source": "/embed/(.*)",
+      "destination": "https://centinela-90g3.onrender.com/embed/$1"
+    },
+    {
+      "source": "/assets/fonts/(.*)",
+      "destination": "https://centinela-90g3.onrender.com/assets/fonts/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }
+      ]
+    }
+  ]
+}

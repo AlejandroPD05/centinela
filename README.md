@@ -7,8 +7,8 @@ despliegues de este portfolio.
 > **Estado: implementación completa (M0–M10) y desplegada.** Motor de checks,
 > histórico, avisos y status page pública, panel de operador, endurecimiento,
 > E2E con Playwright, servidor MCP para asistentes y ficha en el portfolio.
-> Demo: <https://centinela-90g3.onrender.com/status/demo>. Hoja de ruta
-> completa [aquí](#hoja-de-ruta).
+> Panel: <https://centinela-lake.vercel.app>. Hoja de ruta completa
+> [aquí](#hoja-de-ruta).
 
 ## Cómo funciona
 
@@ -75,14 +75,17 @@ condiciona la vigilancia: los checks y los avisos siguen aunque nadie mire.
 
 ## Demo
 
-- Panel de operador: <https://centinela-90g3.onrender.com/>
-- Status page de muestra: <https://centinela-90g3.onrender.com/status/demo>
-- Widget embebible: <https://centinela-90g3.onrender.com/embed/demo>
-- Insignia SVG: <https://centinela-90g3.onrender.com/badge/demo/api-demo.svg>
+- Panel de operador: <https://centinela-lake.vercel.app>
+- Status page de muestra: <https://centinela-lake.vercel.app/status/demo>
+- Widget embebible: <https://centinela-lake.vercel.app/embed/demo>
+- Insignia SVG: <https://centinela-lake.vercel.app/badge/demo/api-demo.svg>
 
-El servicio vive en el plan gratuito de Render: se duerme tras unos minutos sin
-tráfico y los checks se pausan hasta la siguiente visita. La
-[guía de despliegue](docs/DEPLOYMENT.md) explica cómo pasar a Starter para
+El [panel](https://centinela-lake.vercel.app) se sirve como sitio estático en
+Vercel (`vercel.json`) y las rutas `/api`, `/status`, `/badge`, `/embed` y las
+fuentes se enrutan al backend de Render, que es quien habla con PostgreSQL y
+ejecuta el worker. Ese backend vive en el plan gratuito de Render: se duerme
+tras unos minutos sin tráfico y los checks se pausan hasta la siguiente visita.
+La [guía de despliegue](docs/DEPLOYMENT.md) explica cómo pasar a Starter para
 vigilancia 24/7.
 
 ## Stack
@@ -236,7 +239,7 @@ un espacio, `CENTINELA_WORKSPACE` lo fija por defecto.
 - [x] **M7 — Endurecimiento:** guarda SSRF en el socket, SSE multi-instancia por `LISTEN/NOTIFY`, límites por IP y por token, watchdog + dead-man switch, copias de seguridad y apagado ordenado ([manual de operación](docs/OPERATIONS.md))
 - [x] **M8 — E2E y despliegue:** pruebas de extremo a extremo con servidor víctima y CI, semilla reproducible (`db:seed`), panel servido por la API en producción y guía Render + Neon ([despliegue](docs/DEPLOYMENT.md))
 - [x] **M9 — Servidor MCP:** estado e incidencias como herramientas para asistentes (`apps/mcp`, solo lectura y con clave de API)
-- [x] **M10 — Ficha en el portfolio:** captura real del panel en 1280 × 800, resumen técnico y pila, con enlace al repositorio y a la [demo pública](https://centinela-90g3.onrender.com/status/demo)
+- [x] **M10 — Ficha en el portfolio:** captura real del panel en 1280 × 800, resumen técnico y pila, con enlace al repositorio y a la [demo pública](https://centinela-lake.vercel.app/status/demo)
 
 ## Licencia
 

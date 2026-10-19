@@ -63,7 +63,24 @@ Variables:
 No toques `ALLOW_PRIVATE_TARGETS`: en producción la guarda SSRF debe estar
 activa (los monitores apuntan a webs públicas).
 
-## 3. Primer acceso
+## 3. Panel en Vercel (opcional)
+
+El backend de Render sirve el panel compilado, pero también puedes publicarlo
+como sitio estático en Vercel y dejar que enrute las llamadas al backend. El
+repositorio ya trae `vercel.json` para ello:
+
+1. En Vercel, importa el repositorio. El `vercel.json` fija el comando de
+   instalación, el de build, el directorio de salida y los _rewrites_.
+2. Despliega. Las rutas `/api`, `/status`, `/badge`, `/embed` y
+   `/assets/fonts` viajan al servicio de Render; el resto se sirve como
+   estático con vuelta a `index.html` para que funcionen las rutas del panel.
+3. Si tu servicio de Render no se llama `centinela`, ajusta las URLs de los
+   _rewrites_ en `vercel.json`.
+
+Desde la CLI: `npx vercel deploy --prod --project <proyecto>`. Con el
+proyecto conectado al repositorio, cada push a `main` despliega solo.
+
+## 4. Primer acceso
 
 Crea el operador contra la base de Neon, desde tu máquina:
 
@@ -90,7 +107,7 @@ espacio real.
 
 Entra en `https://<servicio>.onrender.com/` y accede con esa cuenta.
 
-## 4. Dominio propio
+## 5. Dominio propio
 
 1. Render → Settings → Custom Domain → añade `status.tudominio.com`.
 2. En tu DNS, un CNAME al host que indique Render; el certificado se emite solo.
@@ -98,7 +115,7 @@ Entra en `https://<servicio>.onrender.com/` y accede con esa cuenta.
    `https://status.tudominio.com/badge/<espacio>/<monitor>.svg`
 4. El widget para incrustar: `https://status.tudominio.com/embed/<espacio>`.
 
-## 5. Despliegues y escala
+## 6. Despliegues y escala
 
 - Cada push a `main` despliega; las migraciones corren en el build.
 - ¿Un despliegue torcido? **Deploys → Rollback** al build anterior.
@@ -107,7 +124,7 @@ Entra en `https://<servicio>.onrender.com/` y accede con esa cuenta.
   `NOTIFY`, que reparte cada instancia con su `LISTEN`.
 - Panel, status page y badges comparten origen: no hay CORS de por medio.
 
-## 6. Operación
+## 7. Operación
 
 - Copias de seguridad y restauración: [OPERATIONS.md](OPERATIONS.md) (Neon
   guarda _point-in-time restore_; el volcado con `pnpm db:backup` es la red
@@ -115,21 +132,25 @@ Entra en `https://<servicio>.onrender.com/` y accede con esa cuenta.
 - Vigilancia del motor y dead-man switch: [OPERATIONS.md](OPERATIONS.md).
 - Avisos: Discord o webhook desde el panel (Canales); email con Resend.
 
-## 7. Lo que no cubre el plan gratuito (honestidad)
+## 8. Lo que no cubre el plan gratuito (honestidad)
 
 - **Render free duerme** el servicio a los ~15 minutos sin tráfico: los checks
   se pausan y una caída nocturna no se detectaría. Para vigilancia 24/7 hace
   falta Starter (~7 $/mes); el plan gratuito sigue valiendo para enseñar la
   status page o probar el despliegue.
+- **Vercel free** sirve el panel siempre, pero las llamadas al backend de
+  Render pueden tardar en el primer acceso tras el letargo del plan gratuito.
 - **Neon free** guarda 0,5 GB y un histórico corto de _restore_; de sobra para
   un portfolio, corto si algún día esto crece.
 
-## 8. Lista de comprobación
+## 9. Lista de comprobación
 
 - [ ] `GET /api/health` responde 200 con `"status":"ok"` y el bloque `worker`
 - [ ] `GET /api/health/ready` llega a PostgreSQL
 - [ ] La status page carga en HTTPS y el badge SVG responde
 - [ ] Login del panel y creación de un monitor de prueba (pasa a `up`)
+- [ ] El panel de Vercel (si se publica) carga y el login funciona a través de
+      los _rewrites_
 - [ ] Una caída de mentira (pausa un servicio vigilado) genera incidencia y
       aviso, y la recuperación la cierra
 - [ ] `SELF_PING_URL` configurada si usas dead-man switch
