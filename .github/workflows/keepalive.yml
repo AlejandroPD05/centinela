@@ -7,6 +7,10 @@ name: Keep-alive
 #
 # La URL se puede cambiar sin tocar el archivo con la variable de repositorio
 # CENTINELA_HEALTH_URL (Settings → Secrets and variables → Actions → Variables).
+#
+# Nota: GitHub desactiva los workflows programados tras 60 días sin actividad en
+# el repositorio; si llega a pasar, se reactiva con un clic desde la pestaña
+# Actions.
 
 on:
   schedule:
