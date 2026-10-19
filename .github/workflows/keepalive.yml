@@ -1,0 +1,33 @@
+name: Keep-alive
+
+# Mantiene despierto el backend de Render (plan free): se duerme tras unos
+# minutos sin tráfico, así que un ping frecuente evita los arranques en frío
+# y deja la vigilancia activa 24/7. El ping va directo al backend, sin pasar
+# por Vercel. Se puede lanzar a mano desde la pestaña Actions.
+#
+# La URL se puede cambiar sin tocar el archivo con la variable de repositorio
+# CENTINELA_HEALTH_URL (Settings → Secrets and variables → Actions → Variables).
+
+on:
+  schedule:
+    # Cada 5 minutos: deja margen de sobra frente a los 15 minutos de letargo.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CENTINELA_HEALTH_URL: ${{ vars.CENTINELA_HEALTH_URL || 'https://centinela-90g3.onrender.com/api/health' }}
+    steps:
+      - name: Despertar el backend
+        run: |
+          curl -fsS --max-time 60 --retry 3 --retry-delay 10 "$CENTINELA_HEALTH_URL"
+          echo "Centinela despierto"

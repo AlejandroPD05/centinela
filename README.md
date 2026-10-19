@@ -83,10 +83,12 @@ condiciona la vigilancia: los checks y los avisos siguen aunque nadie mire.
 El [panel](https://centinela-lake.vercel.app) se sirve como sitio estático en
 Vercel (`vercel.json`) y las rutas `/api`, `/status`, `/badge`, `/embed` y las
 fuentes se enrutan al backend de Render, que es quien habla con PostgreSQL y
-ejecuta el worker. Ese backend vive en el plan gratuito de Render: se duerme
-tras unos minutos sin tráfico y los checks se pausan hasta la siguiente visita.
-La [guía de despliegue](docs/DEPLOYMENT.md) explica cómo pasar a Starter para
-vigilancia 24/7.
+ejecuta el worker. Ese backend vive en el plan gratuito de Render, que se
+duerme tras unos minutos sin tráfico: el workflow
+[`keepalive.yml`](.github/workflows/keepalive.yml) le manda un ping cada
+5 minutos para mantenerlo despierto y la vigilancia activa. Si prefieres no
+depender de ese ping, la [guía de despliegue](docs/DEPLOYMENT.md) explica cómo
+pasar a Starter.
 
 ## Stack
 

@@ -13,7 +13,7 @@ bórrala sin más.
 | Panel de Render           | <https://dashboard.render.com/web/srv-dbb2olvf3r2c73828kqg> (servicio `centinela`, Frankfurt, plan free)                                           |
 | Base de datos             | Neon, proyecto `centinela` (`spring-frog-89581907`), región `aws-eu-central-1`, PostgreSQL 17, cadena directa con `sslmode=require`                |
 | Carpeta local             | `C:\Users\OneCu\Desktop\Personal\Yo\Profesional\Proyectos personales\Centinela`                                                                    |
-| Ficha en el portfolio     | [alejandropd05.github.io/portfolio](https://alejandropd05.github.io/portfolio/) — tarjeta #011, con enlace a repositorio y demo (commit `5888585`) |
+| Ficha en el portfolio     | [alejandropd05.github.io/portfolio](https://alejandropd05.github.io/portfolio/) — tarjeta #011, con enlace a repositorio y demo (commit `2273cbe`) |
 | Guía de despliegue        | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)                                                                                                           |
 | Operación (backups, etc.) | [docs/OPERATIONS.md](docs/OPERATIONS.md)                                                                                                           |
 | Config del servidor MCP   | Sección «Servidor MCP» del [README](README.md)                                                                                                     |
@@ -38,19 +38,16 @@ Despliegue verificado el 19/10/2026:
 - Demo sembrada: 7 monitores, 116.647 checks de 90 días y 3 incidencias.
 - Panel en Vercel: `/`, `/login`, `/api/*`, `/status/demo`, el badge y las
   fuentes responden 200 a través de los _rewrites_ al backend de Render.
+- Vigilancia 24/7 con el plan free: el workflow `Keep-alive`
+  (`.github/workflows/keepalive.yml`) hace ping cada 5 minutos y evita que
+  Render se duerma. Medido antes del keep-alive: primer acceso tras el letargo,
+  22,5 s.
 - Usuario administrador: `alejandroprietodiez05@gmail.com` (contraseña
   entregada al desplegar; no se guarda en el repositorio).
 
 ## Lo que queda (todo opcional)
 
-### 1. Vigilancia 24/7
-
-El servicio está en el plan **free** de Render: se duerme tras unos minutos sin
-tráfico y los checks se pausan. Para vigilancia real, cambiar `plan: free` por
-`plan: starter` en `render.yaml` y añadir el método de pago en Render
-(~7 $/mes). La guía lo explica en la §8.
-
-### 2. Monitores reales e insignias
+### 1. Monitores reales e insignias
 
 El espacio `demo` es solo escaparate. Para vigilar los proyectos de verdad:
 
@@ -61,7 +58,7 @@ El espacio `demo` es solo escaparate. Para vigilar los proyectos de verdad:
 3. Añadir esas insignias a los READMEs de los demás proyectos y, si se quiere,
    el widget: `/embed/centinela`.
 
-### 3. Ideas opcionales
+### 2. Ideas opcionales
 
 - Canal email con Resend (solo faltan las claves, el código ya está).
 - Dominio propio `status.<tu-dominio>` (CNAME en Render, §5 de la guía).
@@ -104,3 +101,7 @@ pnpm dev                      # API en http://127.0.0.1:4100 y panel en 4101
   `centinela` del equipo `me-myself-and-i-8b2d` conectado al repositorio: cada
   push a `main` publica el panel. Los _rewrites_ de `vercel.json` apuntan al
   backend de Render.
+- El workflow `Keep-alive` mantiene despierto el backend de Render con un ping
+  cada 5 minutos (GitHub Actions, repositorio público: sin coste). Se puede
+  lanzar a mano o desactivar desde la pestaña Actions; la URL se cambia con la
+  variable de repositorio `CENTINELA_HEALTH_URL`.

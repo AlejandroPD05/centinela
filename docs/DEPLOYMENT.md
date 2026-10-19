@@ -118,6 +118,9 @@ Entra en `https://<servicio>.onrender.com/` y accede con esa cuenta.
 ## 6. Despliegues y escala
 
 - Cada push a `main` despliega; las migraciones corren en el build.
+- El workflow `Keep-alive` (`.github/workflows/keepalive.yml`) hace ping al
+  backend cada 5 minutos para que no se duerma en el plan free; se puede
+  lanzar a mano o desactivar desde la pestaña Actions.
 - ¿Un despliegue torcido? **Deploys → Rollback** al build anterior.
 - Escalar a varias instancias es seguro: el scheduler reclama trabajo con
   `UPDATE … FOR UPDATE SKIP LOCKED` y los avisos en vivo viajan por
@@ -134,12 +137,14 @@ Entra en `https://<servicio>.onrender.com/` y accede con esa cuenta.
 
 ## 8. Lo que no cubre el plan gratuito (honestidad)
 
-- **Render free duerme** el servicio a los ~15 minutos sin tráfico: los checks
-  se pausan y una caída nocturna no se detectaría. Para vigilancia 24/7 hace
-  falta Starter (~7 $/mes); el plan gratuito sigue valiendo para enseñar la
-  status page o probar el despliegue.
-- **Vercel free** sirve el panel siempre, pero las llamadas al backend de
-  Render pueden tardar en el primer acceso tras el letargo del plan gratuito.
+- **Render free duerme** el servicio a los ~15 minutos sin tráfico. El
+  repositorio incluye el workflow `.github/workflows/keepalive.yml`, que le
+  manda un ping cada 5 minutos para mantenerlo despierto y la vigilancia
+  activa; sin él, los checks se pausan y una caída nocturna no se detectaría.
+  Si prefieres no depender de GitHub Actions, la alternativa es Starter
+  (~7 $/mes).
+- **Vercel free** sirve el panel siempre, pero sin el keep-alive las llamadas
+  al backend de Render pueden tardar en el primer acceso tras el letargo.
 - **Neon free** guarda 0,5 GB y un histórico corto de _restore_; de sobra para
   un portfolio, corto si algún día esto crece.
 
