@@ -1,54 +1,62 @@
 # Continuar con Centinela
 
-Nota de traspaso (18 de octubre de 2026). Cuando no quede nada pendiente,
+Nota de traspaso (19 de octubre de 2026). Cuando no quede nada pendiente,
 bórrala sin más.
 
 ## Dónde está todo
 
-| Qué                       | Dónde                                                                                                                        |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Código                    | [github.com/AlejandroPD05/centinela](https://github.com/AlejandroPD05/centinela) (público, CI en verde)                      |
-| Carpeta local             | `C:\Users\OneCu\Desktop\Personal\Yo\Profesional\Proyectos personales\Centinela`                                              |
-| Ficha en el portfolio     | [alejandropd05.github.io/portfolio](https://alejandropd05.github.io/portfolio/) — tarjeta #011, ya con enlace al repositorio |
-| Guía de despliegue        | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)                                                                                     |
-| Operación (backups, etc.) | [docs/OPERATIONS.md](docs/OPERATIONS.md)                                                                                     |
-| Config del servidor MCP   | Sección «Servidor MCP» del [README](README.md)                                                                               |
+| Qué                       | Dónde                                                                                                                                              |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Código                    | [github.com/AlejandroPD05/centinela](https://github.com/AlejandroPD05/centinela) (público, CI en verde)                                            |
+| Demo desplegada           | <https://centinela-90g3.onrender.com/> · status page: <https://centinela-90g3.onrender.com/status/demo>                                            |
+| Panel de Render           | <https://dashboard.render.com/web/srv-dbb2olvf3r2c73828kqg> (servicio `centinela`, Frankfurt, plan free)                                           |
+| Base de datos             | Neon, proyecto `centinela` (`spring-frog-89581907`), región `aws-eu-central-1`, PostgreSQL 17, cadena directa con `sslmode=require`                |
+| Carpeta local             | `C:\Users\OneCu\Desktop\Personal\Yo\Profesional\Proyectos personales\Centinela`                                                                    |
+| Ficha en el portfolio     | [alejandropd05.github.io/portfolio](https://alejandropd05.github.io/portfolio/) — tarjeta #011, con enlace a repositorio y demo (commit `5888585`) |
+| Guía de despliegue        | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)                                                                                                           |
+| Operación (backups, etc.) | [docs/OPERATIONS.md](docs/OPERATIONS.md)                                                                                                           |
+| Config del servidor MCP   | Sección «Servidor MCP» del [README](README.md)                                                                                                     |
 
 ## Estado
 
-**M0–M10 completos.** Motor de checks con guarda SSRF, histórico contable,
-incidencias con línea de tiempo, certificados SSL, heartbeats, avisos
-(Discord/webhook/email), status page pública con SSE, insignias SVG, widget
-embebible, panel de operador, endurecimiento (límites, watchdog, dead-man),
-E2E con Playwright, semilla demo de 90 días, servidor MCP y ficha en el
-portfolio.
+**M0–M10 completos y desplegados.** Motor de checks con guarda SSRF,
+histórico contable, incidencias con línea de tiempo, certificados SSL,
+heartbeats, avisos (Discord/webhook/email), status page pública con SSE,
+insignias SVG, widget embebible, panel de operador, endurecimiento (límites,
+watchdog, dead-man), E2E con Playwright, semilla demo de 90 días, servidor MCP
+y ficha en el portfolio.
 
 Verificación: 225 pruebas en verde (34 shared + 11 MCP + 180 API), 4 E2E
 (Playwright, con servidor víctima) y CI de GitHub en verde.
 
-## Lo que queda
+Despliegue verificado el 19/10/2026:
 
-### 1. Desplegar en Render + Neon (≈ 5 minutos + crear las cuentas)
+- `/api/health` y `/api/health/ready` responden 200; worker activo.
+- `/status/demo`, `/embed/demo` y `/badge/demo/api-demo.svg` responden 200.
+- Login del administrador correcto; espacio `centinela` con rol `admin`.
+- Demo sembrada: 7 monitores, 116.647 checks de 90 días y 3 incidencias.
+- Usuario administrador: `alejandroprietodiez05@gmail.com` (contraseña
+  entregada al desplegar; no se guarda en el repositorio).
 
-Los pasos exactos están en [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). En corto:
+## Lo que queda (todo opcional)
 
-1. **Neon**: proyecto en Frankfurt → copia la cadena **directa** (sin
-   `-pooler`) y añade `?sslmode=require`.
-2. **Render**: New → Blueprint → conecta el repositorio → pega `DATABASE_URL`
-   → Apply. El `render.yaml` ya trae build, migraciones, región y
-   `JWT_SECRET` automático.
-3. **Primer usuario**: comando de la guía (§3, hay variante PowerShell) o
-   desde la Shell de Render.
-4. Opcional: `pnpm api:cli seed-demo` para una status page de muestra.
+### 1. Vigilancia 24/7
 
-### 2. Cuando exista la URL del despliegue
+El servicio está en el plan **free** de Render: se duerme tras unos minutos sin
+tráfico y los checks se pausan. Para vigilancia real, cambiar `plan: free` por
+`plan: starter` en `render.yaml` y añadir el método de pago en Render
+(~7 $/mes). La guía lo explica en la §7.
 
-- Añadir `demo` a la ficha del portfolio: hueco marcado con un comentario en
-  `js/data/projects.js` del repositorio `portfolio`.
-- Poner la URL en el campo **homepage** del repositorio (About).
-- Insignias para los READMEs de los demás proyectos:
-  `https://<url>/badge/<espacio>/<monitor>.svg`
-- Widget embebible: `https://<url>/embed/<espacio>`
+### 2. Monitores reales e insignias
+
+El espacio `demo` es solo escaparate. Para vigilar los proyectos de verdad:
+
+1. Crear los monitores en el espacio `centinela` desde el panel o la API
+   (`POST /api/monitors`), marcándolos públicos.
+2. Su status page quedará en `/status/centinela` y las insignias en
+   `/badge/centinela/<monitor>.svg`.
+3. Añadir esas insignias a los READMEs de los demás proyectos y, si se quiere,
+   el widget: `/embed/centinela`.
 
 ### 3. Ideas opcionales
 
@@ -73,12 +81,19 @@ pnpm dev                      # API en http://127.0.0.1:4100 y panel en 4101
 - Pruebas: `pnpm test` (225) y `pnpm e2e` (4; la primera vez,
   `pnpm e2e:install`).
 - Servidor MCP: `pnpm build && pnpm mcp` (config en el README).
+- Producción: `render.yaml` con `plan: free`; Neon ya tiene la base y las
+  migraciones aplicadas.
 
-## Notas de la parada (18/10/2026)
+## Notas de la parada (19/10/2026)
 
-- Todo parado: API, panel, servicio de pruebas y contenedores. El contenedor
-  `centinela-db-1` salió limpio (`Exited 0`) y **los datos de la demo siguen
-  en su volumen**: al hacer `docker compose up -d` todo vuelve tal cual.
+- API, panel, servicio de pruebas y contenedores parados en local. Los datos
+  de la demo local siguen en el volumen `centinela-db`.
 - Puertos libres: 4100, 4101, 4102, 4200, 4399, 4500 y 5433.
 - El único archivo local no versionado del proyecto es `.env` (no se publica;
   la plantilla es `.env.example`).
+- La CLI de Render quedó autenticada en este equipo (`render whoami`); la de
+  Neon, también (`neon projects list`). Render puede pedir reautenticación al
+  caducar el token.
+- El despliegue se creó por API, no como Blueprint: los cambios en
+  `render.yaml` no alteran el servicio ya creado, pero los pushes a `main` sí
+  redeployan con `autoDeploy`.

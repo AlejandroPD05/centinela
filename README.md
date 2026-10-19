@@ -4,12 +4,11 @@ Monitorización de estado para proyectos propios: disponibilidad, latencia,
 certificados SSL y heartbeats, con una status page pública que vigila los
 despliegues de este portfolio.
 
-> **Estado: implementación completa (M0–M10).** Motor de checks, histórico,
-> avisos y status page pública, panel de operador, endurecimiento, E2E con
-> Playwright, servidor MCP para asistentes y ficha en el portfolio. Lo único
-> pendiente es publicar (repositorio, Render + Neon con la
-> [guía de despliegue](docs/DEPLOYMENT.md)) y añadir los enlaces a la ficha.
-> Hoja de ruta completa [aquí](#hoja-de-ruta).
+> **Estado: implementación completa (M0–M10) y desplegada.** Motor de checks,
+> histórico, avisos y status page pública, panel de operador, endurecimiento,
+> E2E con Playwright, servidor MCP para asistentes y ficha en el portfolio.
+> Demo: <https://centinela-90g3.onrender.com/status/demo>. Hoja de ruta
+> completa [aquí](#hoja-de-ruta).
 
 ## Cómo funciona
 
@@ -73,6 +72,18 @@ con TanStack Query en ciclos cortos (10–30 s; sin SSE en la consola), pinta la
 cinta y la latencia con SVG propio y concentra las acciones —pausar, comprobar
 a demanda, editar, probar un canal— sin recargar la página. El panel no
 condiciona la vigilancia: los checks y los avisos siguen aunque nadie mire.
+
+## Demo
+
+- Panel de operador: <https://centinela-90g3.onrender.com/>
+- Status page de muestra: <https://centinela-90g3.onrender.com/status/demo>
+- Widget embebible: <https://centinela-90g3.onrender.com/embed/demo>
+- Insignia SVG: <https://centinela-90g3.onrender.com/badge/demo/api-demo.svg>
+
+El servicio vive en el plan gratuito de Render: se duerme tras unos minutos sin
+tráfico y los checks se pausan hasta la siguiente visita. La
+[guía de despliegue](docs/DEPLOYMENT.md) explica cómo pasar a Starter para
+vigilancia 24/7.
 
 ## Stack
 
@@ -225,7 +236,7 @@ un espacio, `CENTINELA_WORKSPACE` lo fija por defecto.
 - [x] **M7 — Endurecimiento:** guarda SSRF en el socket, SSE multi-instancia por `LISTEN/NOTIFY`, límites por IP y por token, watchdog + dead-man switch, copias de seguridad y apagado ordenado ([manual de operación](docs/OPERATIONS.md))
 - [x] **M8 — E2E y despliegue:** pruebas de extremo a extremo con servidor víctima y CI, semilla reproducible (`db:seed`), panel servido por la API en producción y guía Render + Neon ([despliegue](docs/DEPLOYMENT.md))
 - [x] **M9 — Servidor MCP:** estado e incidencias como herramientas para asistentes (`apps/mcp`, solo lectura y con clave de API)
-- [x] **M10 — Ficha en el portfolio:** captura real del panel en 1280 × 800, resumen técnico y pila; los enlaces a repositorio y demo se añaden al publicarlos
+- [x] **M10 — Ficha en el portfolio:** captura real del panel en 1280 × 800, resumen técnico y pila, con enlace al repositorio y a la [demo pública](https://centinela-90g3.onrender.com/status/demo)
 
 ## Licencia
 

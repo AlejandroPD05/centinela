@@ -31,6 +31,9 @@ blueprint ya deja configurado:
 - Salud: `/api/health` (responde 200 incluso `degraded`).
 - Región Frankfurt, `autoDeploy` en cada push a `main` y `JWT_SECRET` generado.
 - `HOST=0.0.0.0` (Render inyecta `PORT`; no lo definas a mano).
+- Plan `free` para probar sin tarjeta. Para vigilancia 24/7, cambia
+  `plan: free` por `plan: starter` en `render.yaml` antes de aplicar el
+  blueprint (Render pedirá el método de pago).
 
 ### Manual (equivalente)
 

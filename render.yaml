@@ -9,9 +9,9 @@ services:
     name: centinela
     runtime: node
     # El plan gratuito duerme el servicio tras un rato sin tráfico: los checks
-    # se pausan. Para vigilancia 24/7 hace falta Starter; free vale para
-    # probar el despliegue y enseñar la status page.
-    plan: starter
+    # se pausan. Para vigilancia 24/7 cambia este valor a `starter`; free vale
+    # para probar el despliegue y enseñar la status page sin tarjeta.
+    plan: free
     # Misma región que Neon (Frankfurt) para que los checks no crucen el charco.
     region: frankfurt
     branch: main
